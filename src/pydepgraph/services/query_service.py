@@ -62,6 +62,150 @@ class BasicQueryService:
 
         return self.database.execute_query(query)
 
+
+class ExtendedQueryService(BasicQueryService):
+    """Phase2用の拡張クエリサービス（Function/Class対応）"""
+
+    def find_function_by_name(self, function_name: str) -> Optional[Dict[str, Any]]:
+        """関数名で関数を検索"""
+        query = """
+        MATCH (f:Function {name: $function_name})
+        RETURN f.id as id, f.name as name, f.qualified_name as qualified_name,
+               f.file_path as file_path, f.cyclomatic_complexity as complexity,
+               f.is_method as is_method, f.class_id as class_id
+        LIMIT 1
+        """
+        
+        result = self.database.execute_query(query, {'function_name': function_name})
+        return result[0] if result else None
+
+    def find_class_by_name(self, class_name: str) -> Optional[Dict[str, Any]]:
+        """クラス名でクラスを検索"""
+        query = """
+        MATCH (c:Class {name: $class_name})
+        RETURN c.id as id, c.name as name, c.qualified_name as qualified_name,
+               c.file_path as file_path, c.method_count as method_count,
+               c.inheritance_depth as inheritance_depth, c.is_abstract as is_abstract
+        LIMIT 1
+        """
+        
+        result = self.database.execute_query(query, {'class_name': class_name})
+        return result[0] if result else None
+
+    def find_function_calls_from(self, function_id: str) -> List[Dict[str, Any]]:
+        """指定関数が呼び出す関数一覧を取得"""
+        query = """
+        MATCH (source:Function {id: $function_id})-[r:FunctionCalls]->(target:Function)
+        RETURN target.id as id, target.name as name, target.qualified_name as qualified_name,
+               r.call_type as call_type, r.line_number as line_number
+        ORDER BY target.name
+        """
+        
+        return self.database.execute_query(query, {'function_id': function_id})
+
+    def find_function_calls_to(self, function_id: str) -> List[Dict[str, Any]]:
+        """指定関数を呼び出す関数一覧を取得"""
+        query = """
+        MATCH (source:Function)-[r:FunctionCalls]->(target:Function {id: $function_id})
+        RETURN source.id as id, source.name as name, source.qualified_name as qualified_name,
+               r.call_type as call_type, r.line_number as line_number
+        ORDER BY source.name
+        """
+        
+        return self.database.execute_query(query, {'function_id': function_id})
+
+    def find_class_methods(self, class_id: str) -> List[Dict[str, Any]]:
+        """クラスに属するメソッド一覧を取得"""
+        query = """
+        MATCH (c:Class {id: $class_id})-[r:Contains]->(f:Function)
+        RETURN f.id as id, f.name as name, f.qualified_name as qualified_name,
+               f.cyclomatic_complexity as complexity, f.parameter_count as parameter_count,
+               f.is_static as is_static, f.is_class_method as is_class_method
+        ORDER BY f.name
+        """
+        
+        return self.database.execute_query(query, {'class_id': class_id})
+
+    def find_class_hierarchy_up(self, class_id: str) -> List[Dict[str, Any]]:
+        """クラスの継承階層（親クラス方向）を取得"""
+        query = """
+        MATCH (child:Class {id: $class_id})-[r:Inheritance]->(parent:Class)
+        RETURN parent.id as id, parent.name as name, parent.qualified_name as qualified_name,
+               parent.file_path as file_path, parent.is_abstract as is_abstract
+        ORDER BY parent.name
+        """
+        
+        return self.database.execute_query(query, {'class_id': class_id})
+
+    def find_class_hierarchy_down(self, class_id: str) -> List[Dict[str, Any]]:
+        """クラスの継承階層（子クラス方向）を取得"""
+        query = """
+        MATCH (parent:Class {id: $class_id})<-[r:Inheritance]-(child:Class)
+        RETURN child.id as id, child.name as name, child.qualified_name as qualified_name,
+               child.file_path as file_path, child.is_abstract as is_abstract
+        ORDER BY child.name
+        """
+        
+        return self.database.execute_query(query, {'class_id': class_id})
+
+    def get_all_functions(self, include_methods: bool = True) -> List[Dict[str, Any]]:
+        """全関数一覧を取得"""
+        if include_methods:
+            query = """
+            MATCH (f:Function)
+            RETURN f.id as id, f.name as name, f.qualified_name as qualified_name,
+                   f.file_path as file_path, f.is_method as is_method,
+                   f.cyclomatic_complexity as complexity
+            ORDER BY f.name
+            """
+        else:
+            query = """
+            MATCH (f:Function)
+            WHERE f.is_method = false
+            RETURN f.id as id, f.name as name, f.qualified_name as qualified_name,
+                   f.file_path as file_path, f.is_method as is_method,
+                   f.cyclomatic_complexity as complexity
+            ORDER BY f.name
+            """
+        
+        return self.database.execute_query(query)
+
+    def get_all_classes(self) -> List[Dict[str, Any]]:
+        """全クラス一覧を取得"""
+        query = """
+        MATCH (c:Class)
+        RETURN c.id as id, c.name as name, c.qualified_name as qualified_name,
+               c.file_path as file_path, c.method_count as method_count,
+               c.inheritance_depth as inheritance_depth, c.is_abstract as is_abstract
+        ORDER BY c.name
+        """
+        
+        return self.database.execute_query(query)
+
+    def search_functions_by_complexity(self, min_complexity: int, max_complexity: int = None) -> List[Dict[str, Any]]:
+        """循環複雑度による関数検索"""
+        if max_complexity is None:
+            query = """
+            MATCH (f:Function)
+            WHERE f.cyclomatic_complexity >= $min_complexity
+            RETURN f.id as id, f.name as name, f.qualified_name as qualified_name,
+                   f.file_path as file_path, f.cyclomatic_complexity as complexity
+            ORDER BY f.cyclomatic_complexity DESC
+            """
+            params = {'min_complexity': min_complexity}
+        else:
+            query = """
+            MATCH (f:Function)
+            WHERE f.cyclomatic_complexity >= $min_complexity 
+            AND f.cyclomatic_complexity <= $max_complexity
+            RETURN f.id as id, f.name as name, f.qualified_name as qualified_name,
+                   f.file_path as file_path, f.cyclomatic_complexity as complexity
+            ORDER BY f.cyclomatic_complexity DESC
+            """
+            params = {'min_complexity': min_complexity, 'max_complexity': max_complexity}
+        
+        return self.database.execute_query(query, params)
+
 # class SearchResult:
 #     def __init__(self, items, total_count, search_type, query_time):
 #         self.items = items

@@ -97,31 +97,59 @@ class PyDepGraphCore:
         # Convert to database format
         modules_data = []
         for i, module in enumerate(result.modules, 1):
-            modules_data.append({
-                "id": i,
-                "name": module.name,
-                "file_path": module.file_path,
-                "package": module.package,
-                "lines_of_code": module.lines_of_code or 0,
-                "complexity_score": module.complexity_score or 0.0,
-                "is_external": module.is_external,
-                "is_test": module.is_test
-            })
+            # Handle both dict and object formats
+            if isinstance(module, dict):
+                modules_data.append({
+                    "id": i,
+                    "name": module.get("name", ""),
+                    "file_path": module.get("file_path", ""),
+                    "package": module.get("package", ""),
+                    "lines_of_code": module.get("lines_of_code", 0),
+                    "complexity_score": module.get("complexity_score", 0.0),
+                    "is_external": module.get("is_external", False),
+                    "is_test": module.get("is_test", False)
+                })
+            else:
+                modules_data.append({
+                    "id": i,
+                    "name": module.name,
+                    "file_path": module.file_path,
+                    "package": module.package,
+                    "lines_of_code": module.lines_of_code or 0,
+                    "complexity_score": module.complexity_score or 0.0,
+                    "is_external": module.is_external,
+                    "is_test": module.is_test
+                })
         
         functions_data = []
         for i, function in enumerate(result.functions, 1):
-            functions_data.append({
-                "id": i,
-                "name": function.name,
-                "qualified_name": function.qualified_name,
-                "file_path": function.file_path,
-                "line_number": function.line_number or 0,
-                "cyclomatic_complexity": function.cyclomatic_complexity or 1,
-                "parameter_count": function.parameter_count or 0,
-                "is_method": function.is_method,
-                "is_static": function.is_static,
-                "is_class_method": function.is_class_method
-            })
+            # Handle both dict and object formats
+            if isinstance(function, dict):
+                functions_data.append({
+                    "id": i,
+                    "name": function.get("name", ""),
+                    "qualified_name": function.get("qualified_name", ""),
+                    "file_path": function.get("file_path", ""),
+                    "line_number": function.get("line_number", 0),
+                    "cyclomatic_complexity": function.get("cyclomatic_complexity", 1),
+                    "parameter_count": function.get("parameter_count", 0),
+                    "is_method": function.get("is_method", False),
+                    "is_static": function.get("is_static", False),
+                    "is_class_method": function.get("is_class_method", False)
+                })
+            else:
+                functions_data.append({
+                    "id": i,
+                    "name": function.name,
+                    "qualified_name": function.qualified_name,
+                    "file_path": function.file_path,
+                    "line_number": function.line_number or 0,
+                    "cyclomatic_complexity": function.cyclomatic_complexity or 1,
+                    "parameter_count": function.parameter_count or 0,
+                    "is_method": function.is_method,
+                    "is_static": function.is_static,
+                    "is_class_method": function.is_class_method
+                })
         
         classes_data = []
         for i, cls in enumerate(result.classes, 1):

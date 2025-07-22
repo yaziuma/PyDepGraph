@@ -23,7 +23,7 @@ class TachExtractor(ExtractorBase):
         # Tachコマンド実行
         try:
             result = subprocess.run(
-                ["tach", "report", "dependencies", "--format", "json"],
+                ["tach", "map"],
                 cwd=project_path,
                 capture_output=True,
                 text=True,

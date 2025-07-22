@@ -1,0 +1,40 @@
+{
+  "util/logger.py": [
+    "util/logging_config.py"
+  ],
+  "cli/__init__.py": [
+    "cli/repl.py",
+    "cli/prolog.py"
+  ],
+  "core/__init__.py": [
+    "core/errors.py",
+    "core/types.py",
+    "core/binding_environment.py",
+    "core/merge_bindings.py"
+  ],
+  "util/__init__.py": [
+    "util/variable_mapper.py",
+    "util/logger.py"
+  ],
+  "runtime/interpreter.py": [
+    "runtime/io_manager.py"
+  ],
+  "cli/prolog.py": [
+    "cli/repl.py"
+  ],
+  "parser/__init__.py": [
+    "parser/scanner.py",
+    "parser/parser.py",
+    "parser/token_type.py",
+    "parser/token.py"
+  ],
+  "runtime/__init__.py": [
+    "runtime/logic_interpreter.py",
+    "runtime/builtins.py",
+    "runtime/interpreter.py",
+    "runtime/math_interpreter.py"
+  ],
+  "runtime/io_manager.py": [
+    "runtime/io_streams.py"
+  ]
+}

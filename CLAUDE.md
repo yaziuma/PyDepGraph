@@ -47,3 +47,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **モジュラー設計**: 各コンポーネントは独立性を保つ
 - **拡張可能性**: 新しい抽出ツールの追加が容易な設計
 - **個人利用前提**: 大規模な監視・ログ機構は不要、シンプルな設計を維持
+
+## 開発ツール
+
+- **パッケージ管理**: uvを使用（`uv run pytest`、`uv run ruff`等）
+- **テスト実行**: `uv run pytest`
+- **リント**: `uv run ruff check`
+- **タイプチェック**: `uv run mypy`

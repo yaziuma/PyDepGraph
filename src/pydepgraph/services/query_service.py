@@ -1,9 +1,6 @@
 # pydepgraph/services/query_service.py
 from typing import Any, Optional, List, Dict
 from ..database import GraphDatabase
-import time
-import hashlib
-import json
 
 class BasicQueryService:
     """Phase1用の基本的なクエリサービス"""

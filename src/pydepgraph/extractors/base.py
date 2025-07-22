@@ -3,7 +3,8 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Dict, List, Any
-from ..exceptions import PrologExecutionError
+import logging
+from pathlib import Path
 
 
 @dataclass
@@ -16,9 +17,6 @@ class ExtractionResult:
     relationships: List[Dict[str, Any]] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
-
-import logging
-from pathlib import Path
 
 logger = logging.getLogger(__name__)
 

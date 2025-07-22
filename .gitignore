@@ -206,3 +206,46 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 /uv.lock
+
+# PyDepGraph specific
+# Database files (Kuzu database)
+*.db
+*.db.lock
+*.db-wal
+*.db-journal
+*.db-shm
+pydepgraph.db*
+test.db*
+
+# Configuration files (local only)
+pydepgraph.toml
+
+# Temporary analysis files
+*.tmp
+*.temp
+analysis_*.json
+dependency_*.json
+
+# Log files
+*.log
+logs/
+
+# Cache directories
+.cache/
+__pycache__/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

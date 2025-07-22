@@ -1,6 +1,7 @@
 # pydepgraph/services/query_service.py
 from typing import Any, Optional, List, Dict
 from ..database import GraphDatabase
+from ..models import Module, Function, Class, ModuleImport, FunctionCall
 
 class BasicQueryService:
     """Phase1用の基本的なクエリサービス"""
@@ -205,6 +206,118 @@ class ExtendedQueryService(BasicQueryService):
             params = {'min_complexity': min_complexity, 'max_complexity': max_complexity}
         
         return self.database.execute_query(query, params)
+
+    def get_all_module_imports(self) -> List[Dict[str, Any]]:
+        """全モジュールimport関係一覧を取得"""
+        query = """
+        MATCH (source:Module)-[r:ModuleImports]->(target:Module)
+        RETURN source.name as source_module, target.name as target_module,
+               r.import_type as import_type, r.import_alias as import_alias,
+               r.line_number as line_number
+        ORDER BY source.name, target.name
+        """
+        
+        return self.database.execute_query(query)
+
+    def get_all_function_calls(self) -> List[Dict[str, Any]]:
+        """全関数call関係一覧を取得"""
+        query = """
+        MATCH (source:Function)-[r:FunctionCalls]->(target:Function)
+        RETURN source.qualified_name as source_function, target.qualified_name as target_function,
+               r.call_type as call_type, r.line_number as line_number
+        ORDER BY source.qualified_name, target.qualified_name
+        """
+        
+        return self.database.execute_query(query)
+
+    def get_all_modules(self, include_external: bool = False) -> List[Module]:
+        """全モジュール一覧を取得（モデルオブジェクト版）"""
+        results = super().get_all_modules(include_external)
+        modules = []
+        for row in results:
+            if isinstance(row, dict):
+                modules.append(Module(
+                    name=row.get('name', ''),
+                    file_path=row.get('file_path', ''),
+                    package=row.get('package'),
+                    is_external=row.get('is_external', False)
+                ))
+        return modules
+
+    def get_all_functions(self, include_methods: bool = True) -> List[Function]:
+        """全関数一覧を取得（モデルオブジェクト版）"""
+        results = super().get_all_functions(include_methods)
+        functions = []
+        for row in results:
+            if isinstance(row, dict):
+                functions.append(Function(
+                    name=row.get('name', ''),
+                    qualified_name=row.get('qualified_name', ''),
+                    file_path=row.get('file_path', ''),
+                    cyclomatic_complexity=row.get('complexity'),
+                    is_method=row.get('is_method', False)
+                ))
+        return functions
+
+    def get_all_classes(self) -> List[Class]:
+        """全クラス一覧を取得（モデルオブジェクト版）"""
+        results = super().get_all_classes()
+        classes = []
+        for row in results:
+            if isinstance(row, dict):
+                classes.append(Class(
+                    name=row.get('name', ''),
+                    qualified_name=row.get('qualified_name', ''),
+                    file_path=row.get('file_path', ''),
+                    method_count=row.get('method_count'),
+                    inheritance_depth=row.get('inheritance_depth'),
+                    is_abstract=row.get('is_abstract', False)
+                ))
+        return classes
+
+    def get_all_module_imports(self) -> List[ModuleImport]:
+        """全モジュールimport関係一覧を取得（モデルオブジェクト版）"""
+        query = """
+        MATCH (source:Module)-[r:ModuleImports]->(target:Module)
+        RETURN source.name as source_module, target.name as target_module,
+               r.import_type as import_type, r.import_alias as import_alias,
+               r.line_number as line_number
+        ORDER BY source.name, target.name
+        """
+        
+        results = self.database.execute_query(query)
+        imports = []
+        for row in results:
+            if isinstance(row, dict):
+                imports.append(ModuleImport(
+                    source_module=row.get('source_module', ''),
+                    target_module=row.get('target_module', ''),
+                    import_type=row.get('import_type', 'standard'),
+                    import_alias=row.get('import_alias'),
+                    line_number=row.get('line_number')
+                ))
+        return imports
+
+    def get_all_function_calls(self) -> List[FunctionCall]:
+        """全関数call関係一覧を取得（モデルオブジェクト版）"""
+        query = """
+        MATCH (source:Function)-[r:FunctionCalls]->(target:Function)
+        RETURN source.qualified_name as source_function, target.qualified_name as target_function,
+               r.call_type as call_type, r.line_number as line_number
+        ORDER BY source.qualified_name, target.qualified_name
+        """
+        
+        results = self.database.execute_query(query)
+        calls = []
+        for row in results:
+            if isinstance(row, dict):
+                calls.append(FunctionCall(
+                    source_function=row.get('source_function', ''),
+                    target_function=row.get('target_function', ''),
+                    call_type=row.get('call_type', 'direct'),
+                    line_number=row.get('line_number')
+                ))
+        return calls
 
 # class SearchResult:
 #     def __init__(self, items, total_count, search_type, query_time):

@@ -1,0 +1,171 @@
+{
+  "prolog_mcp/prolog_wrapper.py": [
+    "prolog_mcp/streamable_http_manager.py",
+    "prolog_mcp/logger.py",
+    "prolog_mcp/exceptions.py",
+    "prolog_mcp/config.py"
+  ],
+  "prolog_mcp/monitoring/__init__.py": [
+    "prolog_mcp/monitoring/alert_manager.py",
+    "prolog_mcp/monitoring/metrics_collector.py",
+    "prolog_mcp/monitoring/performance_tracker.py",
+    "prolog_mcp/monitoring/health_checker.py",
+    "prolog_mcp/monitoring/operational_monitor.py"
+  ],
+  "prolog_mcp/test_suite.py": [
+    "prolog_mcp/interactive_debugger.py",
+    "prolog_mcp/session_manager.py",
+    "prolog_mcp/logger.py",
+    "prolog_mcp/fastmcp_server.py",
+    "prolog_mcp/config_manager.py",
+    "prolog_mcp/prolog_wrapper.py"
+  ],
+  "prolog_mcp/fastmcp_server.py": [
+    "prolog_mcp/prolog_wrapper.py",
+    "prolog_mcp/exceptions.py",
+    "prolog_mcp/logger.py"
+  ],
+  "prolog_mcp/session_manager.py": [
+    "prolog_mcp/advanced_input_handlers.py",
+    "prolog_mcp/logger.py",
+    "prolog_mcp/prolog_wrapper.py"
+  ],
+  "prolog_mcp/advanced_input_handlers.py": [
+    "prolog_mcp/logger.py"
+  ],
+  "prolog_mcp/monitoring/health_checker.py": [
+    "prolog_mcp/logger.py"
+  ],
+  "prolog_mcp/streamable_http_manager.py": [
+    "prolog_mcp/logger.py",
+    "prolog_mcp/exceptions.py",
+    "prolog_mcp/io_stream_manager.py"
+  ],
+  "prolog_mcp/fastmcp_streamable_http.py": [
+    "prolog_mcp/streamable_http_manager.py",
+    "prolog_mcp/logger.py",
+    "prolog_mcp/prolog_wrapper.py",
+    "prolog_mcp/fastmcp_server.py"
+  ],
+  "prolog_mcp/logger.py": [
+    "prolog_mcp/config.py"
+  ],
+  "prolog_mcp/monitoring/metrics_collector.py": [
+    "prolog_mcp/logger.py"
+  ],
+  "prolog_mcp/operational_docs.py": [
+    "prolog_mcp/logger.py",
+    "prolog_mcp/prolog_wrapper.py",
+    "prolog_mcp/session_manager.py",
+    "prolog_mcp/config_manager.py",
+    "prolog_mcp/fastmcp_server.py"
+  ],
+  "prolog_mcp/interactive_debugger.py": [
+    "prolog_mcp/logger.py"
+  ],
+  "prolog_mcp/monitoring/operational_monitor.py": [
+    "prolog_mcp/monitoring/metrics_collector.py",
+    "prolog_mcp/monitoring/performance_tracker.py",
+    "prolog_mcp/logger.py",
+    "prolog_mcp/monitoring/health_checker.py",
+    "prolog_mcp/monitoring/alert_manager.py"
+  ],
+  "prolog_mcp/thread_utils.py": [
+    "prolog_mcp/logger.py",
+    "prolog_mcp/exceptions.py"
+  ],
+  "prolog_mcp/tool_functions.py": [
+    "prolog_mcp/exceptions.py",
+    "prolog_mcp/prolog_wrapper.py"
+  ],
+  "prolog_mcp/error_handling/recovery_strategy_manager.py": [
+    "prolog_mcp/logger.py",
+    "prolog_mcp/error_handling/hierarchical_error_handler.py"
+  ],
+  "prolog_mcp/config_manager.py": [
+    "prolog_mcp/logger.py"
+  ],
+  "prolog_mcp/monitoring_system.py": [
+    "prolog_mcp/logger.py",
+    "prolog_mcp/session_manager.py",
+    "prolog_mcp/config_manager.py",
+    "prolog_mcp/fastmcp_server.py"
+  ],
+  "prolog_mcp/io_stream_manager.py": [
+    "prolog_mcp/logger.py",
+    "prolog_mcp/exceptions.py"
+  ],
+  "prolog_mcp/operational_readiness.py": [
+    "prolog_mcp/session_manager.py",
+    "prolog_mcp/config_manager.py",
+    "prolog_mcp/test_suite.py",
+    "prolog_mcp/monitoring_system.py",
+    "prolog_mcp/fastmcp_server.py",
+    "prolog_mcp/interactive_debugger.py",
+    "prolog_mcp/logger.py"
+  ],
+  "prolog_mcp/mcp_tools.py": [
+    "prolog_mcp/models.py",
+    "prolog_mcp/exceptions.py",
+    "prolog_mcp/logger.py",
+    "prolog_mcp/prolog_wrapper.py"
+  ],
+  "prolog_mcp/streamable_http_endpoints.py": [
+    "prolog_mcp/prolog_wrapper.py",
+    "prolog_mcp/exceptions.py",
+    "prolog_mcp/streamable_http_manager.py",
+    "prolog_mcp/logger.py"
+  ],
+  "prolog_mcp/future_delete_main.py": [
+    "prolog_mcp/exceptions.py",
+    "prolog_mcp/mcp_tools.py",
+    "prolog_mcp/logger.py",
+    "prolog_mcp/models.py",
+    "prolog_mcp/prolog_wrapper.py",
+    "prolog_mcp/config.py"
+  ],
+  "prolog_mcp/error_handling/specialized_handlers.py": [
+    "prolog_mcp/logger.py",
+    "prolog_mcp/error_handling/hierarchical_error_handler.py"
+  ],
+  "prolog_mcp/prolog_io_manager.py": [
+    "prolog_mcp/io_stream_manager.py",
+    "prolog_mcp/logger.py",
+    "prolog_mcp/exceptions.py",
+    "prolog_mcp/advanced_input_handlers.py"
+  ],
+  "prolog_mcp/error_handling/hierarchical_error_handler.py": [
+    "prolog_mcp/exceptions.py",
+    "prolog_mcp/logger.py"
+  ],
+  "prolog_mcp/fastmcp_streamable_server.py": [
+    "prolog_mcp/prolog_wrapper.py",
+    "prolog_mcp/fastmcp_streamable_http.py",
+    "prolog_mcp/exceptions.py",
+    "prolog_mcp/logger.py",
+    "prolog_mcp/streamable_http_manager.py"
+  ],
+  "prolog_mcp/monitoring/alert_manager.py": [
+    "prolog_mcp/logger.py"
+  ],
+  "prolog_mcp/monitoring/performance_tracker.py": [
+    "prolog_mcp/logger.py"
+  ],
+  "prolog_mcp/async_bridge.py": [
+    "prolog_mcp/prolog_wrapper.py",
+    "prolog_mcp/exceptions.py",
+    "prolog_mcp/logger.py"
+  ],
+  "prolog_mcp/error_handling/__init__.py": [
+    "prolog_mcp/error_handling/specialized_handlers.py",
+    "prolog_mcp/error_handling/recovery_strategy_manager.py",
+    "prolog_mcp/error_handling/hierarchical_error_handler.py"
+  ],
+  "prolog_mcp/request_state_manager.py": [
+    "prolog_mcp/logger.py"
+  ],
+  "prolog_mcp/streamable_http_io_manager.py": [
+    "prolog_mcp/logger.py",
+    "prolog_mcp/io_stream_manager.py"
+  ]
+}

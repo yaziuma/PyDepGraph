@@ -3,6 +3,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Dict, List, Any
+from ..exceptions import PrologExecutionError
 
 
 @dataclass
@@ -16,28 +17,49 @@ class ExtractionResult:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
+import logging
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
 class ExtractorBase(ABC):
-    """Abstract base class for all dependency extractors."""
+    """依存関係抽出器の抽象基底クラス"""
 
     @abstractmethod
-    def extract(self, project_path: str) -> ExtractionResult:
+    def extract(self, project_path: str) -> "ExtractionResult":
         """
-        Extracts dependency information from a project.
+        プロジェクトから依存関係を抽出
 
         Args:
-            project_path: The root path of the project to analyze.
+            project_path: プロジェクトのルートパス
 
         Returns:
-            An ExtractionResult object containing the extracted data.
+            ExtractionResult: 抽出結果
+
+        Raises:
+            PrologExecutionError: 抽出に失敗した場合
         """
         pass
 
     @abstractmethod
     def get_supported_file_types(self) -> List[str]:
         """
-        Returns a list of file extensions supported by the extractor.
+        サポートするファイル拡張子を返す
 
         Returns:
-            A list of strings, e.g., ['.py', '.pyi'].
+            List[str]: サポートする拡張子のリスト
         """
         pass
+
+    def validate_project_path(self, project_path: str) -> bool:
+        """
+        プロジェクトパスの有効性を検証
+
+        Args:
+            project_path: 検証するパス
+
+        Returns:
+            bool: 有効な場合True
+        """
+        path = Path(project_path)
+        return path.exists() and path.is_dir()

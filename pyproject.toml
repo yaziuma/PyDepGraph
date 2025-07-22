@@ -9,3 +9,15 @@ dependencies = [
     "kuzu>=0.11.0",
     "tach>=0.29.0",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest-cov>=6.2.1",
+    "pytest-sugar>=1.0.0",
+    "pytest-timeout>=2.4.0",
+    "pytest-xdist>=3.8.0",
+    "ruff>=0.12.4",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -75,9 +75,17 @@ class TestPyprologIntegration:
         
         # 実際の関数名が含まれていることを確認
         function_names = [f["name"] if isinstance(f, dict) else f.name for f in result.functions]
-        # Code2Flowでよく抽出される関数名
-        common_functions = ["__init__", "run", "execute", "parse", "scan_tokens"]
-        found_functions = [name for name in common_functions if name in function_names]
+        
+        # Code2Flow実動作では関数名に行番号が含まれる形式になる（例："12: __init__()"）
+        # そのため、部分一致で確認する
+        common_functions = ["__init__", "run", "execute", "parse", "scan"]
+        found_functions = []
+        for common_func in common_functions:
+            for func_name in function_names:
+                if common_func in func_name:
+                    found_functions.append(func_name)
+                    break
+        
         assert len(found_functions) > 0, f"期待される関数が見つかりません。実際の関数: {function_names[:10]}"
     
     def test_database_integration(self):

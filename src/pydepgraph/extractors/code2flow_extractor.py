@@ -26,9 +26,239 @@ class Code2FlowExtractor(ExtractorBase):
         if not self.validate_project_path(project_path):
             raise ValueError(f"Invalid project path: {project_path}")
 
-        # Code2Flowが利用できない場合はAST解析を使用
-        logger.info("Using AST analysis for function-level dependencies")
-        return self._ast_analysis(project_path)
+        # まず実Code2Flowコマンドの実行を試行
+        try:
+            return self._run_code2flow(project_path)
+        except Exception as e:
+            logger.warning(f"Code2Flow execution failed: {e}")
+            logger.info("Falling back to AST analysis for function-level dependencies")
+            return self._ast_analysis(project_path)
+
+    def _run_code2flow(self, project_path: str) -> RawExtractionResult:
+        """実際のCode2Flowコマンドを実行"""
+        try:
+            # Code2Flowコマンドの実行（JSON形式で出力）
+            cmd = ["code2flow", "--language", "py", "--output", "/tmp/code2flow_output.json", project_path]
+            logger.info(f"Running Code2Flow: {' '.join(cmd)}")
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=300,  # 5分のタイムアウト
+                cwd=project_path
+            )
+            
+            if result.returncode != 0:
+                raise PrologExecutionError(f"Code2Flow failed with return code {result.returncode}: {result.stderr}")
+            
+            # 出力ファイルの読み取り
+            output_file = "/tmp/code2flow_output.json"
+            if not Path(output_file).exists():
+                raise PrologExecutionError("Code2Flow output file not found")
+            
+            with open(output_file, 'r', encoding='utf-8') as f:
+                output_content = f.read()
+            
+            if not output_content.strip():
+                raise PrologExecutionError("Code2Flow produced no output")
+            
+            logger.info("Code2Flow execution successful, parsing output...")
+            return self._parse_code2flow_output(output_content, project_path)
+            
+        except subprocess.TimeoutExpired:
+            raise PrologExecutionError("Code2Flow execution timed out")
+        except FileNotFoundError:
+            raise PrologExecutionError("Code2Flow not found. Please install code2flow: pip install code2flow")
+        except Exception as e:
+            raise PrologExecutionError(f"Code2Flow execution failed: {e}")
+
+    def _parse_code2flow_output(self, output: str, project_path: str) -> RawExtractionResult:
+        """Code2Flowの出力（JSON形式）を解析してPyDepGraph形式に変換"""
+        functions = []
+        classes = []
+        relationships = []
+        
+        try:
+            # JSON形式の解析
+            data = json.loads(output)
+            current_function_id = 0
+            function_name_to_info = {}
+            
+            # Code2FlowのJSON構造に合わせて解析
+            graph = data.get('graph', {})
+            nodes = graph.get('nodes', {})
+            edges = graph.get('edges', {})
+            
+            # ノード情報の抽出
+            for node_id, node_data in nodes.items():
+                current_function_id += 1
+                label = node_data.get('label', '')
+                name = node_data.get('name', '')
+                
+                # ラベルから行番号を抽出（例："12: __init__()" -> "__init__()"）
+                if ':' in label:
+                    line_str, func_name = label.split(':', 1)
+                    line_number = int(line_str.strip()) if line_str.strip().isdigit() else 0
+                    func_name = func_name.strip()
+                else:
+                    line_number = 0
+                    func_name = label.strip()
+                
+                # nameから実際のファイルパスとクラス情報を抽出
+                # 例："binding_environment::BindingEnvironment.__init__"
+                if '::' in name:
+                    parts = name.split('::')
+                    if len(parts) >= 2:
+                        module_name = parts[0]
+                        function_full_name = parts[1]
+                        
+                        # クラスメソッドかどうかを判定
+                        if '.' in function_full_name:
+                            class_name, method_name = function_full_name.rsplit('.', 1)
+                            is_method = True
+                            qualified_name = f"{module_name}::{class_name}.{method_name}"
+                        else:
+                            is_method = False
+                            qualified_name = f"{module_name}::{function_full_name}"
+                    else:
+                        qualified_name = name
+                        is_method = False
+                else:
+                    qualified_name = name
+                    is_method = False
+                
+                function_info = {
+                    'id': f"func_{current_function_id:06d}",
+                    'name': func_name,
+                    'qualified_name': qualified_name,
+                    'file_path': name.split('::')[0] if '::' in name else 'unknown',
+                    'line_number': line_number,
+                    'cyclomatic_complexity': 1,
+                    'parameter_count': 0,
+                    'is_method': is_method,
+                    'is_static': False,
+                    'is_class_method': False,
+                    'extractor': 'code2flow'
+                }
+                functions.append(function_info)
+                function_name_to_info[node_id] = function_info
+            
+            # エッジ情報の抽出（edgesはリスト形式）
+            for edge_data in edges:
+                source_id = edge_data.get('source', '')
+                target_id = edge_data.get('target', '')
+                
+                source_info = function_name_to_info.get(source_id)
+                target_info = function_name_to_info.get(target_id)
+                
+                if source_info and target_info:
+                    relationships.append({
+                        'relationship_type': 'FunctionCalls',
+                        'source_function': source_info['qualified_name'],
+                        'target_function': target_info['qualified_name'],
+                        'source_function_id': source_info['id'],
+                        'target_function_id': target_info['id'],
+                        'file_path': source_info['file_path'],
+                        'line_number': 0,
+                        'call_type': 'direct',
+                        'extractor': 'code2flow'
+                    })
+            
+        except json.JSONDecodeError as e:
+            # JSON解析失敗時はDOT形式として処理
+            logger.warning(f"JSON parsing failed: {e}, trying DOT format")
+            return self._parse_dot_format(output, project_path)
+        
+        logger.info(f"Code2Flow parsing completed: {len(functions)} functions, {len(relationships)} relationships")
+        
+        return RawExtractionResult(
+            modules=[],
+            functions=functions,
+            classes=classes,
+            relationships=relationships,
+            metadata={
+                'extractor': 'code2flow',
+                'total_functions': len(functions),
+                'total_classes': len(classes),
+                'total_relationships': len(relationships),
+                'project_path': project_path,
+            }
+        )
+
+    def _parse_dot_format(self, output: str, project_path: str) -> RawExtractionResult:
+        """DOT形式の出力を解析（フォールバック）"""
+        functions = []
+        classes = []
+        relationships = []
+        
+        lines = output.split('\n')
+        current_function_id = 0
+        function_name_to_info = {}
+        
+        for line in lines:
+            line = line.strip()
+            
+            # ノード定義の解析 (例: "func1" [label="function_name"])
+            if '[label=' in line and 'shape=' not in line:
+                parts = line.split('[label=')
+                if len(parts) >= 2:
+                    node_id = parts[0].strip().strip('"')
+                    label_part = parts[1].split(']')[0].strip('"')
+                    
+                    current_function_id += 1
+                    function_info = {
+                        'id': f"func_{current_function_id:06d}",
+                        'name': label_part,
+                        'qualified_name': f"{project_path}::{label_part}",
+                        'file_path': project_path,
+                        'line_number': 0,
+                        'cyclomatic_complexity': 1,
+                        'parameter_count': 0,
+                        'is_method': False,
+                        'is_static': False,
+                        'is_class_method': False,
+                        'extractor': 'code2flow'
+                    }
+                    functions.append(function_info)
+                    function_name_to_info[node_id] = function_info
+            
+            # エッジ定義の解析 (例: "func1" -> "func2")
+            elif '->' in line and not line.startswith('//'):
+                parts = line.split('->')
+                if len(parts) >= 2:
+                    source = parts[0].strip().strip('"').strip()
+                    target = parts[1].split('[')[0].strip().strip('"').strip()
+                    
+                    source_info = function_name_to_info.get(source)
+                    target_info = function_name_to_info.get(target)
+                    
+                    if source_info and target_info:
+                        relationships.append({
+                            'relationship_type': 'FunctionCalls',
+                            'source_function': source_info['qualified_name'],
+                            'target_function': target_info['qualified_name'],
+                            'source_function_id': source_info['id'],
+                            'target_function_id': target_info['id'],
+                            'file_path': project_path,
+                            'line_number': 0,
+                            'call_type': 'direct',
+                            'extractor': 'code2flow'
+                        })
+        
+        return RawExtractionResult(
+            modules=[],
+            functions=functions,
+            classes=classes,
+            relationships=relationships,
+            metadata={
+                'extractor': 'code2flow',
+                'total_functions': len(functions),
+                'total_classes': len(classes),
+                'total_relationships': len(relationships),
+                'project_path': project_path,
+            }
+        )
 
     def _ast_analysis(self, project_path: str) -> RawExtractionResult:
         """ASTを使用した関数・クラス依存関係の抽出"""

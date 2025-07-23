@@ -8,17 +8,24 @@ import logging
 
 from .base import ExtractorBase, RawExtractionResult
 from ..exceptions import PrologExecutionError
+from ..utils.metadata_collector import MetadataCollector
 
 logger = logging.getLogger(__name__)
 
 class TachExtractor(ExtractorBase):
     """Tachを使用したモジュール依存関係抽出器"""
+    
+    def __init__(self):
+        self.metadata_collector = MetadataCollector()
 
     def extract(self, project_path: str) -> RawExtractionResult:
         """Tachコマンドを実行してモジュール依存関係を抽出"""
 
         if not self.validate_project_path(project_path):
             raise ValueError(f"Invalid project path: {project_path}")
+        
+        # Store project path for metadata collection
+        self.project_path = project_path
 
         # Tachコマンド実行
         try:
@@ -99,14 +106,20 @@ class TachExtractor(ExtractorBase):
     def _extract_module_info(self, module_path: str, module_id: str) -> Dict[str, Any]:
         """モジュールパスから基本情報を抽出"""
         path = Path(module_path)
-
+        
+        # Convert module path to actual file path for metadata collection
+        actual_file_path = self._resolve_module_file_path(module_path)
+        
+        # Extract metadata using MetadataCollector
+        metadata = self.metadata_collector.collect_module_metadata(actual_file_path, str(path.parent))
+        
         return {
             'id': module_id,
             'name': path.stem,
             'file_path': module_path,
             'package': str(path.parent).replace('/', '.') if path.parent != Path('.') else '',
-            'lines_of_code': 0,
-            'complexity_score': 0.0,
+            'lines_of_code': metadata.get('lines_of_code', 0),
+            'complexity_score': metadata.get('complexity_score', 0.0),
             'is_external': self._is_external_module(module_path),
             'is_test': self._is_test_module(module_path),
         }
@@ -122,6 +135,32 @@ class TachExtractor(ExtractorBase):
                 'tests' in lower_path or
                 lower_path.endswith('_test.py') or
                 lower_path.endswith('test_.py'))
+    
+    def _resolve_module_file_path(self, module_path: str) -> str:
+        """モジュールパスから実際のファイルパスを解決"""
+        # Tachは相対パス形式でモジュールを報告する（例：cli/repl）
+        # これを実際のファイルパスに変換する
+        
+        project_root = Path(self.project_path)
+        
+        # Try different possible file paths
+        possible_paths = [
+            project_root / f"{module_path}.py",      # cli/repl.py
+            project_root / module_path / "__init__.py",  # cli/repl/__init__.py
+            project_root / f"{module_path}/__init__.py", # cli/repl/__init__.py (alternative)
+        ]
+        
+        for path in possible_paths:
+            if path.exists() and path.is_file():
+                return str(path)
+        
+        # If no specific file found, try to find a directory and collect all Python files
+        dir_path = project_root / module_path
+        if dir_path.exists() and dir_path.is_dir():
+            return str(dir_path)
+        
+        # Fallback: return the original path (may not exist, MetadataCollector will handle gracefully)
+        return str(project_root / f"{module_path}.py")
 
     def get_supported_file_types(self) -> List[str]:
         """サポートするファイル拡張子を返す"""

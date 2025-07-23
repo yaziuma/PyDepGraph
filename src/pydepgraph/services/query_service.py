@@ -245,8 +245,27 @@ class ExtendedQueryService(BasicQueryService):
         return modules
 
     def get_all_functions(self, include_methods: bool = True) -> List[Function]:
-        """全関数一覧を取得（モデルオブジェクト版）"""
-        results = super().get_all_functions(include_methods)
+        """全関数一覧を取得（モデルオブジェクト版）"""  
+        # Call the dictionary version method defined earlier in this class
+        if include_methods:
+            query = """
+            MATCH (f:Function)
+            RETURN f.id as id, f.name as name, f.qualified_name as qualified_name,
+                   f.file_path as file_path, f.is_method as is_method,
+                   f.cyclomatic_complexity as complexity
+            ORDER BY f.name
+            """
+        else:
+            query = """
+            MATCH (f:Function)
+            WHERE f.is_method = false
+            RETURN f.id as id, f.name as name, f.qualified_name as qualified_name,
+                   f.file_path as file_path, f.is_method as is_method,
+                   f.cyclomatic_complexity as complexity
+            ORDER BY f.name
+            """
+        
+        results = self.database.execute_query(query)
         functions = []
         for row in results:
             if isinstance(row, dict):
@@ -261,7 +280,15 @@ class ExtendedQueryService(BasicQueryService):
 
     def get_all_classes(self) -> List[Class]:
         """全クラス一覧を取得（モデルオブジェクト版）"""
-        results = super().get_all_classes()
+        query = """
+        MATCH (c:Class)
+        RETURN c.id as id, c.name as name, c.qualified_name as qualified_name,
+               c.file_path as file_path, c.method_count as method_count,
+               c.inheritance_depth as inheritance_depth, c.is_abstract as is_abstract
+        ORDER BY c.name
+        """
+        
+        results = self.database.execute_query(query)
         classes = []
         for row in results:
             if isinstance(row, dict):

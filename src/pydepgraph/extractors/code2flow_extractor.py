@@ -9,6 +9,7 @@ import logging
 
 from .base import ExtractorBase, RawExtractionResult
 from ..exceptions import PrologExecutionError
+from ..utils.metadata_collector import MetadataCollector
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,7 @@ class Code2FlowExtractor(ExtractorBase):
     def __init__(self):
         self.function_id_counter = 0
         self.class_id_counter = 0
+        self.metadata_collector = MetadataCollector()
 
     def extract(self, project_path: str) -> RawExtractionResult:
         """Code2Flowコマンドを実行して関数レベル依存関係を抽出"""
@@ -128,17 +130,32 @@ class Code2FlowExtractor(ExtractorBase):
                     qualified_name = name
                     is_method = False
                 
+                # Try to get more accurate metadata for this function
+                file_path_for_metadata = name.split('::')[0] if '::' in name else 'unknown'
+                actual_file_path = Path(project_path) / f"{file_path_for_metadata}.py"
+                
+                # Get enhanced metadata if file exists
+                enhanced_metadata = {}
+                if actual_file_path.exists():
+                    file_metadata = self.metadata_collector.collect_file_metadata(str(actual_file_path))
+                    if file_metadata:
+                        # Find matching function in metadata
+                        for func_meta in file_metadata.functions:
+                            if func_meta['name'] == func_name:
+                                enhanced_metadata = func_meta
+                                break
+                
                 function_info = {
                     'id': f"func_{current_function_id:06d}",
                     'name': func_name,
                     'qualified_name': qualified_name,
-                    'file_path': name.split('::')[0] if '::' in name else 'unknown',
+                    'file_path': file_path_for_metadata,
                     'line_number': line_number,
-                    'cyclomatic_complexity': 1,
-                    'parameter_count': 0,
-                    'is_method': is_method,
-                    'is_static': False,
-                    'is_class_method': False,
+                    'cyclomatic_complexity': enhanced_metadata.get('cyclomatic_complexity', 1),
+                    'parameter_count': enhanced_metadata.get('parameter_count', 0),
+                    'is_method': enhanced_metadata.get('is_method', is_method),
+                    'is_static': enhanced_metadata.get('is_static', False),
+                    'is_class_method': enhanced_metadata.get('is_class_method', False),
                     'extractor': 'code2flow'
                 }
                 functions.append(function_info)
@@ -272,16 +289,51 @@ class Code2FlowExtractor(ExtractorBase):
         
         for py_file in python_files:
             try:
+                # Use MetadataCollector for comprehensive analysis
+                file_metadata = self.metadata_collector.collect_file_metadata(str(py_file))
+                if file_metadata:
+                    # Extract functions with accurate metadata
+                    for func_data in file_metadata.functions:
+                        self.function_id_counter += 1
+                        function_info = {
+                            'id': f"func_{self.function_id_counter:06d}",
+                            'name': func_data['name'],
+                            'qualified_name': func_data['qualified_name'],
+                            'file_path': str(py_file.relative_to(project_root)),
+                            'line_number': func_data['line_number'],
+                            'cyclomatic_complexity': func_data['cyclomatic_complexity'],
+                            'parameter_count': func_data['parameter_count'],
+                            'is_method': func_data['is_method'],
+                            'is_static': func_data['is_static'],
+                            'is_class_method': func_data['is_class_method'],
+                            'extractor': 'code2flow_ast'
+                        }
+                        functions.append(function_info)
+                    
+                    # Extract classes with accurate metadata
+                    for class_data in file_metadata.classes:
+                        self.class_id_counter += 1
+                        class_info = {
+                            'id': f"class_{self.class_id_counter:06d}",
+                            'name': class_data['name'],
+                            'qualified_name': class_data['qualified_name'],
+                            'file_path': str(py_file.relative_to(project_root)),
+                            'line_number': class_data['line_number'],
+                            'method_count': class_data['method_count'],
+                            'inheritance_depth': class_data['inheritance_depth'],
+                            'is_abstract': class_data['is_abstract'],
+                            'extractor': 'code2flow_ast'
+                        }
+                        classes.append(class_info)
+                
+                # Still use AST for relationship analysis
                 with open(py_file, 'r', encoding='utf-8') as f:
                     content = f.read()
                 
                 tree = ast.parse(content)
-                file_functions, file_classes, file_relationships = self._analyze_ast(
+                _, _, file_relationships = self._analyze_ast(
                     tree, str(py_file.relative_to(project_root))
                 )
-                
-                functions.extend(file_functions)
-                classes.extend(file_classes)
                 relationships.extend(file_relationships)
                 
             except Exception as e:

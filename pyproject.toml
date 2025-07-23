@@ -12,10 +12,14 @@ dependencies = [
     "pandas>=1.3.0",
     "networkx>=3.5",
     "scipy>=1.16.0",
+    "radon>=6.0.1",
 ]
 
 [project.scripts]
 pydepgraph = "pydepgraph.cli:main"
+
+[tool.uv]
+package = true
 
 [project.optional-dependencies]
 dev = [

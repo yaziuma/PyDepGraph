@@ -7,7 +7,7 @@ from .config import Config
 from .database import GraphDatabase
 from .extractors.tach_extractor import TachExtractor
 from .extractors.code2flow_extractor import Code2FlowExtractor
-from .data_integrator import DataIntegrator
+from .services.data_integrator import DataIntegrator
 from .models import ExtractionResult
 from .exceptions import PyDepGraphError
 
@@ -66,7 +66,7 @@ class PyDepGraphCore:
             # Integrate results
             logger.info("Integrating extraction results...")
             integrator = DataIntegrator()
-            integrated_result = integrator.integrate(extraction_results)
+            integrated_result = integrator.integrate_results(extraction_results)
             
             logger.info(f"Integration complete - {len(integrated_result.modules)} modules, "
                        f"{len(integrated_result.functions)} functions, "
@@ -94,67 +94,39 @@ class PyDepGraphCore:
         if self.database is None:
             raise PyDepGraphError("Database not initialized")
         
-        # Convert to database format
+        # Convert to database format (all results are now proper objects)
         modules_data = []
         for i, module in enumerate(result.modules, 1):
-            # Handle both dict and object formats
-            if isinstance(module, dict):
-                modules_data.append({
-                    "id": i,
-                    "name": module.get("name", ""),
-                    "file_path": module.get("file_path", ""),
-                    "package": module.get("package", ""),
-                    "lines_of_code": module.get("lines_of_code", 0),
-                    "complexity_score": module.get("complexity_score", 0.0),
-                    "is_external": module.get("is_external", False),
-                    "is_test": module.get("is_test", False)
-                })
-            else:
-                modules_data.append({
-                    "id": i,
-                    "name": module.name,
-                    "file_path": module.file_path,
-                    "package": module.package,
-                    "lines_of_code": module.lines_of_code or 0,
-                    "complexity_score": module.complexity_score or 0.0,
-                    "is_external": module.is_external,
-                    "is_test": module.is_test
-                })
+            modules_data.append({
+                "id": str(i),  # String IDに変更
+                "name": module.name,
+                "file_path": module.file_path,
+                "package": module.package or "",
+                "lines_of_code": module.lines_of_code or 0,
+                "complexity_score": module.complexity_score or 0.0,
+                "is_external": module.is_external,
+                "is_test": module.is_test
+            })
         
         functions_data = []
         for i, function in enumerate(result.functions, 1):
-            # Handle both dict and object formats
-            if isinstance(function, dict):
-                functions_data.append({
-                    "id": i,
-                    "name": function.get("name", ""),
-                    "qualified_name": function.get("qualified_name", ""),
-                    "file_path": function.get("file_path", ""),
-                    "line_number": function.get("line_number", 0),
-                    "cyclomatic_complexity": function.get("cyclomatic_complexity", 1),
-                    "parameter_count": function.get("parameter_count", 0),
-                    "is_method": function.get("is_method", False),
-                    "is_static": function.get("is_static", False),
-                    "is_class_method": function.get("is_class_method", False)
-                })
-            else:
-                functions_data.append({
-                    "id": i,
-                    "name": function.name,
-                    "qualified_name": function.qualified_name,
-                    "file_path": function.file_path,
-                    "line_number": function.line_number or 0,
-                    "cyclomatic_complexity": function.cyclomatic_complexity or 1,
-                    "parameter_count": function.parameter_count or 0,
-                    "is_method": function.is_method,
-                    "is_static": function.is_static,
-                    "is_class_method": function.is_class_method
-                })
+            functions_data.append({
+                "id": str(i),  # String IDに変更
+                "name": function.name,
+                "qualified_name": function.qualified_name,
+                "file_path": function.file_path,
+                "line_number": function.line_number or 0,
+                "cyclomatic_complexity": function.cyclomatic_complexity or 1,
+                "parameter_count": function.parameter_count or 0,
+                "is_method": function.is_method,
+                "is_static": function.is_static,
+                "is_class_method": function.is_class_method
+            })
         
         classes_data = []
         for i, cls in enumerate(result.classes, 1):
             classes_data.append({
-                "id": i,
+                "id": str(i),  # String IDに変更
                 "name": cls.name,
                 "qualified_name": cls.qualified_name,
                 "file_path": cls.file_path,
@@ -164,20 +136,22 @@ class PyDepGraphCore:
                 "is_abstract": cls.is_abstract
             })
         
-        # Create module name to ID mapping
-        module_name_to_id = {module["name"]: module["id"] for module in modules_data}
+        # Create mapping for relationships - file_pathをキーとして使用
+        module_path_to_id = {module["file_path"]: module["id"] for module in modules_data}
         function_name_to_id = {func["qualified_name"]: func["id"] for func in functions_data}
         class_name_to_id = {cls["qualified_name"]: cls["id"] for cls in classes_data}
         
-        # Module imports
+        logger.debug(f"Class name to ID mapping keys: {list(class_name_to_id.keys())[:5]}")
+        
+        # Module imports - file_pathでマッピング
         imports_data = []
         for i, imp in enumerate(result.module_imports, 1):
-            source_id = module_name_to_id.get(imp.source_module)
-            target_id = module_name_to_id.get(imp.target_module)
+            source_id = module_path_to_id.get(imp.source_module)
+            target_id = module_path_to_id.get(imp.target_module)
             
             if source_id and target_id:
                 imports_data.append({
-                    "id": i,
+                    "id": str(i),  # String IDに変更
                     "source_module_id": source_id,
                     "target_module_id": target_id,
                     "import_type": imp.import_type,
@@ -185,6 +159,8 @@ class PyDepGraphCore:
                     "line_number": imp.line_number or 0,
                     "is_conditional": imp.is_conditional
                 })
+            else:
+                logger.debug(f"Skipping import relationship: {imp.source_module} -> {imp.target_module} (source_id: {source_id}, target_id: {target_id})")
         
         # Function calls
         calls_data = []
@@ -194,7 +170,7 @@ class PyDepGraphCore:
             
             if source_id and target_id:
                 calls_data.append({
-                    "id": i,
+                    "id": str(i),  # String IDに変更
                     "relationship_type": "FunctionCalls",
                     "source_function_id": source_id,
                     "target_function_id": target_id,
@@ -202,6 +178,8 @@ class PyDepGraphCore:
                     "line_number": call.line_number or 0,
                     "is_conditional": call.is_conditional
                 })
+            else:
+                logger.debug(f"Skipping function call: {call.source_function} -> {call.target_function} (source_id: {source_id}, target_id: {target_id})")
         
         # Inheritance relationships
         inheritance_data = []
@@ -211,15 +189,24 @@ class PyDepGraphCore:
             
             if source_id and target_id:
                 inheritance_data.append({
-                    "id": i,
+                    "id": str(i),  # String IDに変更
                     "relationship_type": "Inheritance",
                     "source_class_id": source_id,
                     "target_class_id": target_id,
                     "inheritance_type": inh.inheritance_type,
                     "line_number": inh.line_number or 0
                 })
+                logger.debug(f"Added inheritance: {inh.child_class} -> {inh.parent_class}")
+            else:
+                logger.debug(f"Skipping inheritance: {inh.child_class} -> {inh.parent_class} (source_id: {source_id}, target_id: {target_id})")
+                if i <= 3:  # 最初の数件の詳細ログ
+                    logger.debug(f"  Available class names: {list(class_name_to_id.keys())[:3]}")
+                    logger.debug(f"  Looking for: child='{inh.child_class}', parent='{inh.parent_class}'")
         
-        # Bulk insert into database
+        # Bulk insert into database with detailed logging
+        logger.info(f"Preparing to insert: {len(modules_data)} modules, {len(functions_data)} functions, {len(classes_data)} classes")
+        logger.info(f"Relationships: {len(imports_data)} imports, {len(calls_data)} function calls, {len(inheritance_data)} inheritance")
+        
         if modules_data:
             self.database.bulk_insert_modules(modules_data)
         

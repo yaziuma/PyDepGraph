@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Dict, List, Any
 import logging
 
-from .base import ExtractorBase, ExtractionResult
+from .base import ExtractorBase, RawExtractionResult
 from ..exceptions import PrologExecutionError
 
 logger = logging.getLogger(__name__)
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class TachExtractor(ExtractorBase):
     """Tachを使用したモジュール依存関係抽出器"""
 
-    def extract(self, project_path: str) -> ExtractionResult:
+    def extract(self, project_path: str) -> RawExtractionResult:
         """Tachコマンドを実行してモジュール依存関係を抽出"""
 
         if not self.validate_project_path(project_path):
@@ -83,7 +83,7 @@ class TachExtractor(ExtractorBase):
 
         logger.info(f"Tach extraction completed: {len(modules)} modules, {len(relationships)} relationships")
 
-        return ExtractionResult(
+        return RawExtractionResult(
             modules=modules,
             functions=[],
             classes=[],

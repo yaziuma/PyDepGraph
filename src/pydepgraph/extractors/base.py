@@ -8,8 +8,8 @@ from pathlib import Path
 
 
 @dataclass
-class ExtractionResult:
-    """Represents the result of an extraction process."""
+class RawExtractionResult:
+    """Represents the raw result of an extraction process (dict format)."""
 
     modules: List[Dict[str, Any]] = field(default_factory=list)
     functions: List[Dict[str, Any]] = field(default_factory=list)
@@ -24,7 +24,7 @@ class ExtractorBase(ABC):
     """依存関係抽出器の抽象基底クラス"""
 
     @abstractmethod
-    def extract(self, project_path: str) -> "ExtractionResult":
+    def extract(self, project_path: str) -> "RawExtractionResult":
         """
         プロジェクトから依存関係を抽出
 

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 import logging
 
-from .base import ExtractorBase, ExtractionResult
+from .base import ExtractorBase, RawExtractionResult
 from ..exceptions import PrologExecutionError
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ class Code2FlowExtractor(ExtractorBase):
         self.function_id_counter = 0
         self.class_id_counter = 0
 
-    def extract(self, project_path: str) -> ExtractionResult:
+    def extract(self, project_path: str) -> RawExtractionResult:
         """Code2Flowコマンドを実行して関数レベル依存関係を抽出"""
         
         if not self.validate_project_path(project_path):
@@ -30,7 +30,7 @@ class Code2FlowExtractor(ExtractorBase):
         logger.info("Using AST analysis for function-level dependencies")
         return self._ast_analysis(project_path)
 
-    def _ast_analysis(self, project_path: str) -> ExtractionResult:
+    def _ast_analysis(self, project_path: str) -> RawExtractionResult:
         """ASTを使用した関数・クラス依存関係の抽出"""
         
         functions = []
@@ -60,7 +60,7 @@ class Code2FlowExtractor(ExtractorBase):
 
         logger.info(f"AST analysis completed: {len(functions)} functions, {len(classes)} classes, {len(relationships)} relationships")
 
-        return ExtractionResult(
+        return RawExtractionResult(
             modules=[],
             functions=functions,
             classes=classes,
@@ -79,11 +79,15 @@ class Code2FlowExtractor(ExtractorBase):
         functions = []
         classes = []
         relationships = []
+        function_names = set()  # ファイル内の関数名を記録
+        class_names = set()  # ファイル内のクラス名を記録
         
         class FunctionVisitor(ast.NodeVisitor):
-            def __init__(self, extractor):
+            def __init__(self, extractor, function_names, class_names):
                 self.extractor = extractor
                 self.current_class = None
+                self.function_names = function_names
+                self.class_names = class_names
                 
             def visit_ClassDef(self, node: ast.ClassDef):
                 class_id = f"class_{self.extractor.class_id_counter:06d}"
@@ -107,16 +111,20 @@ class Code2FlowExtractor(ExtractorBase):
                 
                 # 継承関係を追加
                 for base_class in base_classes:
-                    if base_class != 'object':  # objectは除外
+                    if base_class != 'object' and base_class in self.class_names:
+                        # 同一ファイル内のクラス継承のみを記録
                         relationships.append({
                             'relationship_type': 'Inheritance',
-                            'source_class': node.name,
-                            'target_class': base_class,
+                            'child_class': f"{file_path}::{node.name}",
+                            'parent_class': f"{file_path}::{base_class}",
                             'source_class_id': class_id,
-                            'target_class_id': f"unknown_{base_class}",  # 後で解決が必要
+                            'target_class_id': f"unknown_{base_class}",
                             'file_path': file_path,
                             'line_number': node.lineno,
                         })
+                        logger.debug(f"Added inheritance: {node.name} -> {base_class}")
+                    else:
+                        logger.debug(f"Skipped inheritance: {node.name} -> {base_class} (not in class_names: {self.class_names})")
                 
                 # クラス内のメソッドを解析
                 old_class = self.current_class
@@ -203,13 +211,15 @@ class Code2FlowExtractor(ExtractorBase):
                 for node in ast.walk(func_node):
                     if isinstance(node, ast.Call):
                         called_func = self._get_call_name(node.func)
-                        if called_func:
+                        if called_func and called_func in self.function_names:
+                            # 同一ファイル内の関数呼び出しのみを記録
+                            target_qualified_name = f"{file_path}::{called_func}"
                             relationships.append({
                                 'relationship_type': 'FunctionCalls',
-                                'source_function': func_info['name'],
-                                'target_function': called_func,
+                                'source_function': func_info['qualified_name'],
+                                'target_function': target_qualified_name,
                                 'source_function_id': func_info['id'],
-                                'target_function_id': f"unknown_{called_func}",  # 後で解決が必要
+                                'target_function_id': f"unknown_{called_func}",
                                 'file_path': file_path,
                                 'line_number': getattr(node, 'lineno', 0),
                                 'call_type': 'direct',
@@ -223,7 +233,14 @@ class Code2FlowExtractor(ExtractorBase):
                     return node.attr
                 return None
         
-        visitor = FunctionVisitor(self)
+        # 最初にファイル内の全関数名とクラス名を収集
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef):
+                function_names.add(node.name)
+            elif isinstance(node, ast.ClassDef):
+                class_names.add(node.name)
+        
+        visitor = FunctionVisitor(self, function_names, class_names)
         visitor.visit(tree)
         
         return functions, classes, relationships

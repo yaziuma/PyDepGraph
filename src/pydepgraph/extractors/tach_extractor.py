@@ -138,29 +138,31 @@ class TachExtractor(ExtractorBase):
     
     def _resolve_module_file_path(self, module_path: str) -> str:
         """モジュールパスから実際のファイルパスを解決"""
-        # Tachは相対パス形式でモジュールを報告する（例：cli/repl）
+        # Tachは相対パス形式でモジュールを報告する（例：util/__init__.py, cli/repl.py）
         # これを実際のファイルパスに変換する
         
         project_root = Path(self.project_path)
         
-        # Try different possible file paths
-        possible_paths = [
-            project_root / f"{module_path}.py",      # cli/repl.py
-            project_root / module_path / "__init__.py",  # cli/repl/__init__.py
-            project_root / f"{module_path}/__init__.py", # cli/repl/__init__.py (alternative)
-        ]
+        # Tachからの出力は既に実際のファイルパスの場合が多い
+        # 例：util/__init__.py, cli/repl.py
+        direct_path = project_root / module_path
+        if direct_path.exists() and direct_path.is_file():
+            return str(direct_path)
         
-        for path in possible_paths:
-            if path.exists() and path.is_file():
-                return str(path)
+        # .py拡張子がない場合、追加してみる
+        if not module_path.endswith('.py'):
+            py_path = project_root / f"{module_path}.py"
+            if py_path.exists() and py_path.is_file():
+                return str(py_path)
         
-        # If no specific file found, try to find a directory and collect all Python files
-        dir_path = project_root / module_path
-        if dir_path.exists() and dir_path.is_dir():
-            return str(dir_path)
+        # ディレクトリの場合、__init__.pyを探す
+        if not module_path.endswith('.py'):
+            init_path = project_root / module_path / "__init__.py"
+            if init_path.exists() and init_path.is_file():
+                return str(init_path)
         
-        # Fallback: return the original path (may not exist, MetadataCollector will handle gracefully)
-        return str(project_root / f"{module_path}.py")
+        # Fallback: return the original path (MetadataCollector will handle gracefully)
+        return str(direct_path)
 
     def get_supported_file_types(self) -> List[str]:
         """サポートするファイル拡張子を返す"""

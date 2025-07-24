@@ -132,7 +132,19 @@ def create_parser() -> argparse.ArgumentParser:
 def format_output(data: Any, format_type: str = 'table') -> str:
     """データを指定形式でフォーマット"""
     if format_type == 'json':
-        return json.dumps(data, indent=2, ensure_ascii=False)
+        # Handle NaN and None values for better JSON output
+        def clean_for_json(obj):
+            if isinstance(obj, dict):
+                return {k: clean_for_json(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [clean_for_json(item) for item in obj]
+            elif str(obj) == 'nan':
+                return None
+            else:
+                return obj
+        
+        cleaned_data = clean_for_json(data)
+        return json.dumps(cleaned_data, indent=2, ensure_ascii=False)
     elif format_type == 'table':
         return format_table(data)
     else:
@@ -233,10 +245,10 @@ def cmd_query(args: argparse.Namespace, config: Config) -> int:
         
         if args.filter:
             # Apply simple name filtering
-            if hasattr(results[0], 'name') if results else False:
-                results = [r for r in results if args.filter.lower() in r.name.lower()]
+            if results and (hasattr(results[0], 'name') or 'name' in results[0]):
+                results = [r for r in results if args.filter.lower() in (r.name if hasattr(r, 'name') else r['name']).lower()]
         
-        output_data = [r.to_dict() if hasattr(r, 'to_dict') else r.__dict__ for r in results]
+        output_data = [r.to_dict() if hasattr(r, 'to_dict') else (r if isinstance(r, dict) else r.__dict__) for r in results]
         print(format_output(output_data, args.format))
         
         return 0

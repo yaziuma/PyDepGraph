@@ -132,17 +132,26 @@ class Code2FlowExtractor(ExtractorBase):
                 
                 # Try to get more accurate metadata for this function
                 file_path_for_metadata = name.split('::')[0] if '::' in name else 'unknown'
-                actual_file_path = Path(project_path) / f"{file_path_for_metadata}.py"
+                
+                # Try different possible file paths
+                possible_paths = [
+                    Path(project_path) / f"{file_path_for_metadata}.py",
+                    Path(project_path) / f"{file_path_for_metadata}/__init__.py",
+                    Path(project_path) / file_path_for_metadata
+                ]
                 
                 # Get enhanced metadata if file exists
                 enhanced_metadata = {}
-                if actual_file_path.exists():
-                    file_metadata = self.metadata_collector.collect_file_metadata(str(actual_file_path))
-                    if file_metadata:
-                        # Find matching function in metadata
-                        for func_meta in file_metadata.functions:
-                            if func_meta['name'] == func_name:
-                                enhanced_metadata = func_meta
+                for actual_file_path in possible_paths:
+                    if actual_file_path.exists() and actual_file_path.is_file():
+                        file_metadata = self.metadata_collector.collect_file_metadata(str(actual_file_path))
+                        if file_metadata:
+                            # Find matching function in metadata
+                            for func_meta in file_metadata.functions:
+                                if func_meta['name'] == func_name:
+                                    enhanced_metadata = func_meta
+                                    break
+                            if enhanced_metadata:
                                 break
                 
                 function_info = {

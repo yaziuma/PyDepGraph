@@ -49,7 +49,9 @@ class BasicQueryService:
             query = """
             MATCH (m:Module)
             RETURN m.id as id, m.name as name, m.file_path as file_path,
-                   m.package as package, m.is_external as is_external
+                   m.package as package, m.lines_of_code as lines_of_code,
+                   m.complexity_score as complexity_score, m.is_external as is_external,
+                   m.is_test as is_test, null as extractor
             ORDER BY m.name
             """
         else:
@@ -57,7 +59,9 @@ class BasicQueryService:
             MATCH (m:Module)
             WHERE m.is_external = false
             RETURN m.id as id, m.name as name, m.file_path as file_path,
-                   m.package as package, m.is_external as is_external
+                   m.package as package, m.lines_of_code as lines_of_code,
+                   m.complexity_score as complexity_score, m.is_external as is_external,
+                   m.is_test as is_test, null as extractor
             ORDER BY m.name
             """
 
@@ -240,7 +244,11 @@ class ExtendedQueryService(BasicQueryService):
                     name=row.get('name', ''),
                     file_path=row.get('file_path', ''),
                     package=row.get('package'),
-                    is_external=row.get('is_external', False)
+                    lines_of_code=row.get('lines_of_code'),
+                    complexity_score=row.get('complexity_score'),
+                    is_external=row.get('is_external', False),
+                    is_test=row.get('is_test', False),
+                    extractor=row.get('extractor')
                 ))
         return modules
 

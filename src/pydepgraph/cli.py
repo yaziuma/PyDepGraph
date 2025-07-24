@@ -13,6 +13,8 @@ from .services.query_service import BasicQueryService, ExtendedQueryService
 from .database import GraphDatabase
 from .exceptions import PyDepGraphError
 
+logger = logging.getLogger(__name__)
+
 
 def setup_logging(verbose: int = 0):
     """ログレベルを設定"""
@@ -23,10 +25,9 @@ def setup_logging(verbose: int = 0):
     else:
         level = logging.WARNING
     
-    logging.basicConfig(
-        level=level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
+    # ライブラリとしては、ルートロガーのレベルのみ設定
+    # ハンドラやフォーマッタの設定はアプリケーション側に委ねる
+    logging.getLogger().setLevel(level)
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -397,7 +398,7 @@ def main() -> int:
             return 1
             
     except Exception as e:
-        logging.error(f"Fatal error: {e}")
+        logger.error(f"Fatal error: {e}")
         if args.verbose >= 2:
             import traceback
             traceback.print_exc()

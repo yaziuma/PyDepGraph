@@ -244,17 +244,25 @@ def helper_function():
             pytest.skip("Code2Flow not available")
 
     def test_code2flow_error_handling(self):
-        """Code2Flowエラーハンドリングテスト"""
+        """Code2Flowエラーハンドリングテスト（高速版）"""
         extractor = Code2FlowExtractor()
         
-        # 無効なパスでのエラーハンドリング（正しい動作確認）
+        # 1. 無効なパスでのエラーハンドリング（正しい動作確認）
         with pytest.raises(ValueError, match="Invalid project path"):
             extractor.extract("/absolutely/nonexistent/path/that/should/not/exist")
         
-        # 空文字列は現在ディレクトリとして扱われるため、ASTフォールバック動作を確認
-        result = extractor.extract("")
-        assert result.metadata.get('extractor') == 'code2flow_ast'  # ASTフォールバック
-        assert result is not None
+        # 2. ASTフォールバック強制テスト（Code2Flowコマンド失敗をシミュレート）
+        import unittest.mock
+        with unittest.mock.patch('subprocess.run', side_effect=FileNotFoundError("code2flow command not found")):
+            with tempfile.TemporaryDirectory() as temp_dir:
+                test_file = Path(temp_dir) / "fallback_test.py"
+                test_file.write_text("def fallback_func(): return 42")
+                
+                result = extractor.extract(temp_dir)
+                assert result.metadata.get('extractor') == 'code2flow_ast'  # 強制ASTフォールバック
+                assert result is not None
+                # ASTフォールバックでは関数が検出される
+                assert len(result.functions) >= 1
 
     def test_code2flow_output_cleanup(self, sample_python_project):
         """Code2Flow出力ファイルのクリーンアップテスト"""

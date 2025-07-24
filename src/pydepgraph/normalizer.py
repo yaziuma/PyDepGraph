@@ -1,6 +1,9 @@
 # pydepgraph/normalizer.py
+import logging
 from typing import List
 from .extractors.base import ExtractionResult
+
+logger = logging.getLogger(__name__)
 
 
 class DataNormalizer:
@@ -11,7 +14,7 @@ class DataNormalizer:
     ) -> ExtractionResult:
         """Normalizes and merges multiple extraction results."""
         # This is a placeholder implementation.
-        print(f"DataNormalizer: Normalizing {len(results)} results.")
+        logger.info(f"Normalizing {len(results)} results")
         if not results:
             return ExtractionResult()
 

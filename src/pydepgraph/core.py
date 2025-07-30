@@ -2,6 +2,7 @@
 import logging
 from pathlib import Path
 from typing import Optional
+from tqdm import tqdm
 
 from .config import Config
 from .database import GraphDatabase
@@ -207,23 +208,30 @@ class PyDepGraphCore:
         logger.info(f"Preparing to insert: {len(modules_data)} modules, {len(functions_data)} functions, {len(classes_data)} classes")
         logger.info(f"Relationships: {len(imports_data)} imports, {len(calls_data)} function calls, {len(inheritance_data)} inheritance")
         
-        if modules_data:
-            self.database.bulk_insert_modules(modules_data)
-        
-        if functions_data:
-            self.database.bulk_insert_functions(functions_data)
-        
-        if classes_data:
-            self.database.bulk_insert_classes(classes_data)
-        
-        if imports_data:
-            self.database.bulk_insert_module_imports(imports_data)
-        
-        if calls_data:
-            self.database.bulk_insert_function_calls(calls_data)
-        
-        if inheritance_data:
-            self.database.bulk_insert_inheritance(inheritance_data)
+        with tqdm(total=6, desc="Storing data in database") as pbar:
+            if modules_data:
+                self.database.bulk_insert_modules(modules_data)
+            pbar.update(1)
+            
+            if functions_data:
+                self.database.bulk_insert_functions(functions_data)
+            pbar.update(1)
+            
+            if classes_data:
+                self.database.bulk_insert_classes(classes_data)
+            pbar.update(1)
+            
+            if imports_data:
+                self.database.bulk_insert_module_imports(imports_data)
+            pbar.update(1)
+            
+            if calls_data:
+                self.database.bulk_insert_function_calls(calls_data)
+            pbar.update(1)
+            
+            if inheritance_data:
+                self.database.bulk_insert_inheritance(inheritance_data)
+            pbar.update(1)
     
     def close(self):
         """リソースをクリーンアップ"""

@@ -1,6 +1,6 @@
 [project]
 name = "pydepgraph"
-version = "0.1.0"
+version = "0.2.0"
 description = "Python dependency analysis tool with graph database storage and fast search capabilities"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -13,6 +13,7 @@ dependencies = [
     "networkx>=3.5",
     "scipy>=1.16.0",
     "radon>=6.0.1",
+    "tqdm>=4.67.1",
 ]
 
 [project.scripts]

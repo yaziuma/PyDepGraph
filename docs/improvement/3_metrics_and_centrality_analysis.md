@@ -1,5 +1,12 @@
 # 詳細設計: メトリクスと中心性分析 (v2)
 
+## ⚠️ 重要な注意事項
+
+**このドキュメントの修正履歴**:
+- 既存GraphAnalyticsServiceとの統合を明記
+- GraphConverter → 既存NetworkX統合の拡張に修正済み
+- LCOM4は複雑性のため優先度低に調整
+
 ## 1. 概要
 
 本ドキュメントでは、生成された依存関係グラフを基に、コードの構造的な品質を評価するためのメトリクス計算機能と、グラフ理論に基づいた中心性分析機能に関する詳細設計を定義する。これにより、保守性の低いコードやアーキテクチャ上の弱点を客観的な指標に基づいて特定する。
@@ -8,20 +15,11 @@
 
 ### 2.1. 担当クラス
 
--   `pydepgraph.services.analytics_service.AnalyticsService` (既存のものを拡張)
--   `pydepgraph.utils.GraphConverter` (新規作成)
+-   `pydepgraph.services.graph_analytics_service.GraphAnalyticsService` (既存のものを拡張)
 
-### 2.2. グラフ変換
+### 2.2. NetworkX統合の拡張
 
-多くの高度なグラフ分析アルゴリズムは、`networkx`のような専門ライブラリに実装されている。PyDepGraphの内部グラフ表現を`networkx`のグラフオブジェクトに変換する層を設ける。
-
-#### 2.2.1. 担当クラス: `GraphConverter`
-
--   **メソッド**: `to_networkx(graph: pydepgraph.models.Graph) -> networkx.DiGraph`
--   **処理フロー**:
-    1.  `networkx.DiGraph` (有向グラフ) オブジェクトを初期化する。
-    2.  PyDepGraphの全ノードをループし、`nx_graph.add_node(node.id, **node.attributes)` のように`networkx`グラフにノードを追加する。ノードの属性（種別、パスなど）も一緒に渡す。
-    3.  PyDepGraphの全エッジ（依存関係）をループし、`nx_graph.add_edge(edge.source, edge.target, type=edge.type)` のようにエッジを追加する。
+`GraphAnalyticsService`には既に`_build_graph()`メソッドでNetworkX統合が実装されている。この既存機能を拡張してより高度なメトリクス計算を行う。
 
 ### 2.3. メトリクスの拡張
 
@@ -31,8 +29,8 @@
     -   **ファンイン**: あるノードに向かうエッジの数。そのモジュールがどれだけ「利用されているか」を示す。
     -   **ファンアウト**: あるノードから出るエッジの数。そのモジュールがどれだけ「他に依存しているか」を示す。
 -   **計算方法**:
-    -   `networkx`グラフに変換後、`DiGraph.in_degree()`と`DiGraph.out_degree()`メソッドを呼び出すだけで計算できる。
--   **実装**: `AnalyticsService`内に`calculate_fan_in_out(nx_graph)`メソッドを実装する。
+    -   既存の`_build_graph()`で生成されたNetworkXグラフで、`DiGraph.in_degree()`と`DiGraph.out_degree()`メソッドを呼び出すだけで計算できる。
+-   **実装**: `GraphAnalyticsService`内に`calculate_fan_in_out()`メソッドを実装する。
 
 #### 2.3.2. 凝集度 (LCOM4)
 
@@ -46,7 +44,7 @@
         -   2つのメソッドが同じインスタンス変数を1つでも共有していれば、それらの間にエッジを追加する。
     4.  **ステップC: 連結成分の計算**:
         -   ステップBで構築したグラフの連結成分 (connected components) の数を数える。この数がLCOM4の値となる。
--   **実装**: `AnalyticsService`内に`calculate_lcom4(class_node)`メソッドを実装する。この処理は複雑なため、独立したヘルパークラスに切り出すことも検討する。
+-   **実装**: `GraphAnalyticsService`内に`calculate_lcom4(class_node)`メソッドを実装する。この処理は複雑なため、独立したヘルパークラスに切り出すことも検討する。
 
 ### 2.4. 中心性分析の多様化
 

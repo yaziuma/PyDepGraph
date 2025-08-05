@@ -1,5 +1,12 @@
 # 詳細設計: 依存関係の進化分析 (v2)
 
+## ⚠️ 重要な注意事項
+
+**このドキュメントの修正履歴**:
+- 既存IncrementalAnalyzerとの統合を明記
+- データモデル: `Dependency` → 具体的関係性モデルに修正済み
+- グラフオブジェクト → `ExtractionResult`に修正済み
+
 ## 1. 概要
 
 本ドキュメントでは、依存関係グラフの経時的な変化を分析し、コードベースの健全性を評価するための「依存関係の進化分析」機能に関する詳細設計を定義する。Gitのコミットハッシュと連携し、特定のバージョン間での依存構造の変化を追跡・可視化する。
@@ -10,6 +17,7 @@
 
 #### 2.1.1. 担当クラス
 
+-   `pydepgraph.incremental.IncrementalAnalyzer` (既存を拡張)
 -   `pydepgraph.incremental.SnapshotManager` (新規作成)
 
 #### 2.1.2. スナップショットの仕様
@@ -39,13 +47,13 @@
 
 -   **保存 (`save_snapshot`)**:
     1.  現在のGitコミットハッシュを取得する (`git rev-parse HEAD`)。
-    2.  `pydepgraph.models`のグラフオブジェクトを上記のJSONスキーマにシリアライズする。
+    2.  `ExtractionResult`オブジェクト（modules, functions, classes, imports, function_calls, inheritance のリスト）を上記のJSONスキーマにシリアライズする。
     3.  `.pydepgraph/snapshots/<commit_hash>.json` として保存する。
 -   **読み込み (`load_snapshot`)**:
     1.  引数で指定されたコミットハッシュまたはエイリアス（`latest`, `previous`）を解決する。
         -   `latest`: `git rev-parse HEAD`
         -   `previous`: `git rev-parse HEAD~1`
-    2.  対応するJSONファイルを読み込み、`pydepgraph.models`のグラフオブジェクトにデシリアライズして返却する。
+    2.  対応するJSONファイルを読み込み、`ExtractionResult`オブジェクトにデシリアライズして返却する。
 
 ### 2.2. グラフの比較
 
@@ -70,8 +78,8 @@
     class ComparisonResult:
         added_nodes: Set[Node]
         deleted_nodes: Set[Node]
-        added_edges: Set[Dependency]
-        deleted_edges: Set[Dependency]
+        added_edges: Set[Union[ModuleImport, FunctionCall, Inheritance]]
+        deleted_edges: Set[Union[ModuleImport, FunctionCall, Inheritance]]
     ```
 
 ### 2.3. レポーティングとCLI

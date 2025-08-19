@@ -68,7 +68,8 @@ class Config:
         """デフォルト設定を取得"""
         extractors = {
             "tach": ExtractorConfig(enabled=True),
-            "code2flow": ExtractorConfig(enabled=True, options={"fallback_to_ast": True})
+            "code2flow": ExtractorConfig(enabled=True, options={"fallback_to_ast": True}),
+            "dependency_file": ExtractorConfig(enabled=True)
         }
         
         return cls(

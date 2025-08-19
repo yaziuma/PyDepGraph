@@ -8,6 +8,7 @@ from .config import Config
 from .database import GraphDatabase
 from .extractors.tach_extractor import TachExtractor
 from .extractors.code2flow_extractor import Code2FlowExtractor
+from .extractors.dependency_file_extractor import DependencyFileExtractor
 from .services.data_integrator import DataIntegrator
 from .models import ExtractionResult
 from .exceptions import PyDepGraphError
@@ -60,7 +61,15 @@ class PyDepGraphCore:
                 code2flow_result = code2flow_extractor.extract(str(project_path))
                 extraction_results.append(code2flow_result)
                 logger.info(f"Code2Flow extractor found {len(code2flow_result.functions)} functions, {len(code2flow_result.classes)} classes")
-            
+
+            # Dependency File extractor
+            if self.config.extractors.get("dependency_file", {}).enabled:
+                logger.info("Running Dependency File extractor...")
+                dep_file_extractor = DependencyFileExtractor(str(project_path))
+                dep_file_result = dep_file_extractor.extract()
+                extraction_results.append(dep_file_result)
+                logger.info(f"Dependency File extractor found {len(dep_file_result.modules)} external dependencies")
+
             if not extraction_results:
                 raise PyDepGraphError("No extractors were enabled or executed successfully")
             
@@ -137,8 +146,9 @@ class PyDepGraphCore:
                 "is_abstract": cls.is_abstract
             })
         
-        # Create mapping for relationships - file_pathをキーとして使用
+        # Create mapping for relationships - file_path and name as keys
         module_path_to_id = {module["file_path"]: module["id"] for module in modules_data}
+        module_name_to_id = {module["name"]: module["id"] for module in modules_data}
         function_name_to_id = {func["qualified_name"]: func["id"] for func in functions_data}
         class_name_to_id = {cls["qualified_name"]: cls["id"] for cls in classes_data}
         
@@ -147,8 +157,9 @@ class PyDepGraphCore:
         # Module imports - file_pathでマッピング
         imports_data = []
         for i, imp in enumerate(result.module_imports, 1):
-            source_id = module_path_to_id.get(imp.source_module)
-            target_id = module_path_to_id.get(imp.target_module)
+            # Try to resolve by path first, then by name.
+            source_id = module_path_to_id.get(imp.source_module) or module_name_to_id.get(imp.source_module)
+            target_id = module_path_to_id.get(imp.target_module) or module_name_to_id.get(imp.target_module)
             
             if source_id and target_id:
                 imports_data.append({

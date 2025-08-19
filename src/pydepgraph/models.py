@@ -1,10 +1,10 @@
 # pydepgraph/models.py
 
 from dataclasses import dataclass, asdict
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 
 
-@dataclass
+@dataclass(frozen=True)
 class Module:
     """Module model"""
     name: str
@@ -15,12 +15,12 @@ class Module:
     is_external: bool = False
     is_test: bool = False
     extractor: Optional[str] = None
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
 
-@dataclass
+@dataclass(frozen=True)
 class Function:
     """Function model"""
     name: str
@@ -35,12 +35,12 @@ class Function:
     is_static: bool = False
     is_class_method: bool = False
     extractor: Optional[str] = None
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
 
-@dataclass
+@dataclass(frozen=True)
 class Class:
     """Class model"""
     name: str
@@ -52,12 +52,12 @@ class Class:
     is_abstract: bool = False
     docstring: Optional[str] = None
     extractor: Optional[str] = None
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
 
-@dataclass
+@dataclass(frozen=True)
 class ModuleImport:
     """Module import relationship model"""
     source_module: str
@@ -67,12 +67,12 @@ class ModuleImport:
     line_number: Optional[int] = None
     is_conditional: bool = False
     extractor: Optional[str] = None
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
 
-@dataclass
+@dataclass(frozen=True)
 class FunctionCall:
     """Function call relationship model"""
     source_function: str
@@ -81,12 +81,12 @@ class FunctionCall:
     line_number: Optional[int] = None
     is_conditional: bool = False
     extractor: Optional[str] = None
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
 
-@dataclass
+@dataclass(frozen=True)
 class Inheritance:
     """Class inheritance relationship model"""
     child_class: str
@@ -94,19 +94,19 @@ class Inheritance:
     inheritance_type: str = "direct"
     line_number: Optional[int] = None
     extractor: Optional[str] = None
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
 
-@dataclass
+@dataclass(frozen=True)
 class Contains:
     """Contains relationship model (module contains function/class)"""
     container: str
     contained: str
     contained_type: str  # 'function' or 'class'
     extractor: Optional[str] = None
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
@@ -122,7 +122,7 @@ class ExtractionResult:
     inheritance: List[Inheritance]
     contains: List[Contains]
     metadata: Dict[str, Any]
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             'modules': [m.to_dict() for m in self.modules],
@@ -134,3 +134,11 @@ class ExtractionResult:
             'contains': [c.to_dict() for c in self.contains],
             'metadata': self.metadata
         }
+
+    def all_nodes(self) -> List[Union[Module, Function, Class]]:
+        """Returns a list of all node objects."""
+        return self.modules + self.functions + self.classes
+
+    def all_edges(self) -> List[Union[ModuleImport, FunctionCall, Inheritance]]:
+        """Returns a list of all comparable edge objects."""
+        return self.module_imports + self.function_calls + self.inheritance

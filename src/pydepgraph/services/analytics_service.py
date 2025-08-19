@@ -266,6 +266,70 @@ class GraphAnalyticsService:
         except nx.NetworkXError:
             return {"error": "Failed to analyze dependency depth"}
 
+    def calculate_fan_in_out(self) -> Tuple[Dict[str, int], Dict[str, int]]:
+        """Calculate fan-in and fan-out for all nodes in the graph."""
+        graph = self._build_graph()
+
+        def clean_node_name(node_name: str) -> str:
+            if ":" in node_name:
+                return node_name.split(":", 1)[1]
+            return node_name
+
+        fan_in = {clean_node_name(node): degree for node, degree in graph.in_degree()}
+        fan_out = {clean_node_name(node): degree for node, degree in graph.out_degree()}
+
+        return fan_in, fan_out
+
+    def calculate_betweenness_centrality(self, node_type: Optional[str] = None) -> Dict[str, float]:
+        """Calculate betweenness centrality for nodes."""
+        graph = self._build_graph()
+        centrality = nx.betweenness_centrality(graph)
+
+        def clean_node_name(node_name: str) -> str:
+            if ":" in node_name:
+                return node_name.split(":", 1)[1]
+            return node_name
+
+        return {clean_node_name(node): score for node, score in centrality.items()}
+
+    def calculate_closeness_centrality(self, node_type: Optional[str] = None) -> Dict[str, float]:
+        """Calculate closeness centrality for nodes."""
+        graph = self._build_graph()
+        centrality = nx.closeness_centrality(graph)
+
+        def clean_node_name(node_name: str) -> str:
+            if ":" in node_name:
+                return node_name.split(":", 1)[1]
+            return node_name
+
+        return {clean_node_name(node): score for node, score in centrality.items()}
+
+    def get_all_metrics(self, node_type: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Calculates and returns all metrics for each node in the graph.
+        """
+        graph = self._build_graph()
+        if not graph.nodes:
+            return []
+
+        fan_in, fan_out = self.calculate_fan_in_out()
+        betweenness = self.calculate_betweenness_centrality()
+        closeness = self.calculate_closeness_centrality()
+
+        all_metrics = []
+        for node in graph.nodes:
+            clean_name = node.split(":", 1)[1] if ":" in node else node
+            metrics = {
+                "node": clean_name,
+                "fan_in": fan_in.get(clean_name, 0),
+                "fan_out": fan_out.get(clean_name, 0),
+                "betweenness": betweenness.get(clean_name, 0.0),
+                "closeness": closeness.get(clean_name, 0.0),
+            }
+            all_metrics.append(metrics)
+
+        return all_metrics
+
     def invalidate_cache(self):
         """Invalidate the graph cache"""
         self._graph_cache = None

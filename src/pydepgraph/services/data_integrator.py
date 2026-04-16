@@ -77,7 +77,8 @@ class DataIntegrator:
                     complexity_score=module_data.get("complexity_score"),
                     is_external=module_data.get("is_external", False),
                     is_test=module_data.get("is_test", False),
-                    extractor=module_data.get("extractor")
+                    extractor=module_data.get("extractor"),
+                    role=module_data.get("role")
                 )
                 converted.append(module)
             except Exception as e:

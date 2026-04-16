@@ -51,7 +51,7 @@ class BasicQueryService:
             RETURN m.id as id, m.name as name, m.file_path as file_path,
                    m.package as package, m.lines_of_code as lines_of_code,
                    m.complexity_score as complexity_score, m.is_external as is_external,
-                   m.is_test as is_test, null as extractor
+                   m.is_test as is_test, m.role as role, null as extractor
             ORDER BY m.name
             """
         else:
@@ -61,11 +61,24 @@ class BasicQueryService:
             RETURN m.id as id, m.name as name, m.file_path as file_path,
                    m.package as package, m.lines_of_code as lines_of_code,
                    m.complexity_score as complexity_score, m.is_external as is_external,
-                   m.is_test as is_test, null as extractor
+                   m.is_test as is_test, m.role as role, null as extractor
             ORDER BY m.name
             """
 
         return self.database.execute_query(query)
+
+    def find_modules_by_role(self, role: str) -> List[Dict[str, Any]]:
+        """指定されたロールのモジュールを検索"""
+        query = """
+        MATCH (m:Module)
+        WHERE m.role = $role
+        RETURN m.id as id, m.name as name, m.file_path as file_path,
+               m.package as package, m.lines_of_code as lines_of_code,
+               m.complexity_score as complexity_score, m.is_external as is_external,
+               m.is_test as is_test, m.role as role
+        ORDER BY m.name
+        """
+        return self.database.execute_query(query, {'role': role})
 
 
 class ExtendedQueryService(BasicQueryService):
@@ -248,7 +261,8 @@ class ExtendedQueryService(BasicQueryService):
                     complexity_score=row.get('complexity_score'),
                     is_external=row.get('is_external', False),
                     is_test=row.get('is_test', False),
-                    extractor=row.get('extractor')
+                    extractor=row.get('extractor'),
+                    role=row.get('role')
                 ))
         return modules
 

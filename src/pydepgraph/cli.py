@@ -12,6 +12,8 @@ from .services.analytics_service import GraphAnalyticsService
 from .services.query_service import BasicQueryService, ExtendedQueryService
 from .database import GraphDatabase
 from .exceptions import PyDepGraphError
+from .incremental import SnapshotManager, GraphComparator
+from .reporting.evolution_reporter import EvolutionReporter
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +78,7 @@ def create_parser() -> argparse.ArgumentParser:
     query_parser = subparsers.add_parser('query', help='Query dependency relationships')
     query_parser.add_argument(
         'query_type',
-        choices=['modules', 'functions', 'classes', 'imports', 'calls'],
+        choices=['modules', 'functions', 'classes', 'imports', 'calls', 'role'],
         help='Type of entities to query'
     )
     query_parser.add_argument(
@@ -88,6 +90,17 @@ def create_parser() -> argparse.ArgumentParser:
         choices=['json', 'table'],
         default='table',
         help='Output format (default: table)'
+    )
+    query_parser.add_argument(
+        '--type',
+        dest='node_type',
+        choices=['module'],
+        default='module',
+        help='Node type for role query (default: module)'
+    )
+    query_parser.add_argument(
+        '--value',
+        help='Role value to filter by (for role query)'
     )
     
     # analytics command
@@ -122,11 +135,57 @@ def create_parser() -> argparse.ArgumentParser:
     )
     report_parser.add_argument(
         '--format',
-        choices=['json', 'html', 'markdown'],
+        choices=['json', 'html', 'markdown', 'table'],
         default='markdown',
         help='Report format (default: markdown)'
     )
-    
+    report_parser.add_argument(
+        '--metrics',
+        action='store_true',
+        default=False,
+        help='Include detailed module metrics and centrality scores'
+    )
+    report_parser.add_argument(
+        '--sort-by',
+        choices=['fan_in', 'fan_out', 'betweenness', 'closeness'],
+        default=None,
+        help='Sort metrics by the specified column (requires --metrics)'
+    )
+
+    # evolution command
+    evolution_parser = subparsers.add_parser('evolution', help='Compare dependency graphs between Git commits')
+    evolution_parser.add_argument(
+        '--from',
+        dest='from_ref',
+        default='HEAD~1',
+        help='Starting Git reference (default: HEAD~1)'
+    )
+    evolution_parser.add_argument(
+        '--to',
+        dest='to_ref',
+        default='HEAD',
+        help='Ending Git reference (default: HEAD)'
+    )
+    evolution_parser.add_argument(
+        'project_path',
+        nargs='?',
+        default='.',
+        help='Path to project directory (default: current directory)'
+    )
+
+    # inspect command
+    inspect_parser = subparsers.add_parser('inspect', help='Inspect AST structure of a file or node (LLM-friendly)')
+    inspect_parser.add_argument(
+        'target',
+        help='File path or node name to inspect'
+    )
+    inspect_parser.add_argument(
+        '--format',
+        choices=['json', 'table'],
+        default='json',
+        help='Output format (default: json)'
+    )
+
     return parser
 
 
@@ -230,9 +289,9 @@ def cmd_query(args: argparse.Namespace, config: Config) -> int:
         # Initialize database and services
         database = GraphDatabase(config.database.path)
         query_service = ExtendedQueryService(database)
-        
+
         results = []
-        
+
         if args.query_type == 'modules':
             results = query_service.get_all_modules()
         elif args.query_type == 'functions':
@@ -243,17 +302,23 @@ def cmd_query(args: argparse.Namespace, config: Config) -> int:
             results = query_service.get_all_module_imports()
         elif args.query_type == 'calls':
             results = query_service.get_all_function_calls()
-        
+        elif args.query_type == 'role':
+            role_value = getattr(args, 'value', None)
+            if not role_value:
+                print("Error: --value is required for role query", file=sys.stderr)
+                return 1
+            results = query_service.find_modules_by_role(role_value)
+
         if args.filter:
             # Apply simple name filtering
-            if results and (hasattr(results[0], 'name') or 'name' in results[0]):
+            if results and (hasattr(results[0], 'name') or (isinstance(results[0], dict) and 'name' in results[0])):
                 results = [r for r in results if args.filter.lower() in (r.name if hasattr(r, 'name') else r['name']).lower()]
-        
+
         output_data = [r.to_dict() if hasattr(r, 'to_dict') else (r if isinstance(r, dict) else r.__dict__) for r in results]
         print(format_output(output_data, args.format))
-        
+
         return 0
-        
+
     except PyDepGraphError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
@@ -299,40 +364,91 @@ def cmd_report(args: argparse.Namespace, config: Config) -> int:
         database = GraphDatabase(config.database.path)
         analytics_service = GraphAnalyticsService(database)
         query_service = ExtendedQueryService(database)
-        
+
         # Generate comprehensive report
         stats = analytics_service.get_graph_statistics()
         cycles = analytics_service.detect_circular_dependencies()
         importance = analytics_service.calculate_importance_scores()
-        
+
         report_data = {
             "summary": stats,
             "circular_dependencies": cycles,
             "important_modules": dict(sorted(importance.items(), key=lambda x: x[1], reverse=True)[:10])
         }
-        
+
+        # Handle --metrics flag
+        if getattr(args, 'metrics', False):
+            metrics = analytics_service.get_all_metrics()
+            sort_key = getattr(args, 'sort_by', None)
+            if sort_key:
+                metrics = sorted(metrics, key=lambda m: m.get(sort_key, 0), reverse=True)
+            report_data["metrics"] = metrics
+
         if args.format == 'json':
             output = json.dumps(report_data, indent=2, ensure_ascii=False)
         elif args.format == 'markdown':
             output = generate_markdown_report(report_data)
+        elif args.format == 'table':
+            output = _format_report_table(report_data)
         else:
             output = format_output(report_data, 'table')
-        
+
         if args.output_file:
             with open(args.output_file, 'w', encoding='utf-8') as f:
                 f.write(output)
             print(f"Report saved to {args.output_file}")
         else:
             print(output)
-        
+
         return 0
-        
+
     except PyDepGraphError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
     except Exception as e:
         print(f"Unexpected error: {e}", file=sys.stderr)
         return 1
+
+
+def _format_report_table(report_data: Dict[str, Any]) -> str:
+    """レポートデータをテーブル形式でフォーマット"""
+    lines = []
+
+    # Summary section
+    summary = report_data.get("summary", {})
+    if summary:
+        node_counts = summary.get("node_counts", {})
+        edge_counts = summary.get("edge_counts", {})
+        graph_metrics = summary.get("graph_metrics", {})
+        lines.append("Graph Summary")
+        lines.append("=" * 40)
+        lines.append(f"Total Nodes: {node_counts.get('total', 0)}")
+        lines.append(f"Total Edges: {edge_counts.get('total', 0)}")
+        lines.append(f"Density: {graph_metrics.get('density', 0)}")
+        lines.append(f"Total LOC: {graph_metrics.get('total_lines_of_code', 0)}")
+        lines.append("")
+
+    # Metrics section
+    metrics = report_data.get("metrics")
+    if metrics:
+        lines.append("Module Metrics & Centrality")
+        lines.append("=" * 40)
+        headers = list(metrics[0].keys())
+        header_line = "  ".join(f"{h:>12}" for h in headers)
+        lines.append(header_line)
+        lines.append("-" * len(header_line))
+        for row in metrics:
+            values = []
+            for h in headers:
+                val = row.get(h, "")
+                if isinstance(val, float):
+                    values.append(f"{val:>12.4f}")
+                else:
+                    values.append(f"{str(val):>12}")
+            lines.append("  ".join(values))
+        lines.append("")
+
+    return "\n".join(lines)
 
 
 def generate_markdown_report(data: Dict[str, Any]) -> str:
@@ -369,6 +485,64 @@ def generate_markdown_report(data: Dict[str, Any]) -> str:
     return '\n'.join(lines)
 
 
+def cmd_evolution(args: argparse.Namespace, config: Config) -> int:
+    """evolution コマンドの実行"""
+    try:
+        project_path = getattr(args, 'project_path', '.')
+        from_ref = args.from_ref
+        to_ref = args.to_ref
+
+        manager = SnapshotManager(project_path)
+
+        # Load snapshots for each reference
+        result_before = manager.load_snapshot(from_ref)
+        result_after = manager.load_snapshot(to_ref)
+
+        # Compare the two snapshots
+        comparator = GraphComparator()
+        comparison = comparator.compare(result_before, result_after)
+
+        # Print evolution report
+        reporter = EvolutionReporter(comparison, ref_from=from_ref, ref_to=to_ref)
+        reporter.print_report()
+
+        return 0
+
+    except PyDepGraphError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"Unexpected error: {e}", file=sys.stderr)
+        return 1
+
+
+def cmd_inspect(args: argparse.Namespace, config: Config) -> int:
+    """inspect コマンドの実行 - LLMフレンドリーなAST構造要約"""
+    try:
+        from .inspect import inspect_target
+        result = inspect_target(args.target)
+
+        output_format = getattr(args, 'format', 'json')
+        if output_format == 'json':
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            # table format
+            for item in result.get("definitions", []):
+                kind = item.get("type", "")
+                name = item.get("name", "")
+                sig = item.get("signature", "")
+                print(f"[{kind}] {name}: {sig}")
+
+        return 0
+
+    except PyDepGraphError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"Unexpected error: {e}", file=sys.stderr)
+        return 1
+
+
 def main() -> int:
     """メイン関数"""
     parser = create_parser()
@@ -393,6 +567,10 @@ def main() -> int:
             return cmd_analytics(args, config)
         elif args.command == 'report':
             return cmd_report(args, config)
+        elif args.command == 'evolution':
+            return cmd_evolution(args, config)
+        elif args.command == 'inspect':
+            return cmd_inspect(args, config)
         else:
             print(f"Unknown command: {args.command}", file=sys.stderr)
             return 1

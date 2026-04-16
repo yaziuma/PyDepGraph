@@ -72,6 +72,7 @@ class GraphDatabase:
             complexity_score DOUBLE,
             is_external BOOLEAN,
             is_test BOOLEAN,
+            role STRING,
             PRIMARY KEY (id)
         );
         """
@@ -183,7 +184,8 @@ class GraphDatabase:
                 lines_of_code: $lines_of_code,
                 complexity_score: $complexity_score,
                 is_external: $is_external,
-                is_test: $is_test
+                is_test: $is_test,
+                role: $role
             })
             """
 
@@ -196,6 +198,7 @@ class GraphDatabase:
                 'complexity_score': module['complexity_score'],
                 'is_external': module['is_external'],
                 'is_test': module['is_test'],
+                'role': module.get('role', ''),
             }
 
             self.connection.execute(query, params)

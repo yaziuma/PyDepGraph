@@ -29,12 +29,21 @@ uv run pydepgraph analyze /path/to/project
 
 # 依存関係検索
 uv run pydepgraph query modules
+uv run pydepgraph query functions
+uv run pydepgraph query role --value service
 
 # グラフ統計
 uv run pydepgraph analytics stats
 
 # レポート生成
 uv run pydepgraph report --output-file report.md
+uv run pydepgraph report --metrics --sort-by fan_in
+
+# AST構造検査（LLMフレンドリー）
+uv run pydepgraph inspect src/pydepgraph/core.py
+
+# 依存関係の進化分析
+uv run pydepgraph evolution --from HEAD~1 --to HEAD /path/to/project
 ```
 
 ## アーキテクチャ
@@ -48,15 +57,22 @@ uv run pydepgraph report --output-file report.md
 - **Core** (`core.py`): メインの分析エンジン、プロジェクト分析のエントリーポイント
 - **Extractors**: TachExtractor（モジュール間依存）、Code2FlowExtractor（関数間呼び出し）、DependencyFileExtractor（外部依存）
 - **Data Processing**: DataIntegrator（複数の抽出結果を統合・正規化）
+- **Normalizer** (`normalizer.py`): FQN（完全修飾名）正規化、エイリアス解決
+- **Role Inferrer** (`role_inferrer.py`): モジュールのロール（役割）自動推論
+- **Inspector** (`inspect.py`): LLMフレンドリーなAST構造要約生成
 - **Graph Database** (`database.py`): Kùzuを使用したグラフデータベース操作
 - **Services**: Analytics Service（グラフ分析）、Query Service（検索機能）
+- **Incremental**: SnapshotManager（スナップショット管理）、GraphComparator（グラフ比較）
+- **Reporting**: EvolutionReporter（進化レポート生成）
 - **CLI** (`cli.py`): すべてのユーザーインターフェース
 
 ### データフロー
 1. **抽出**: 各Extractorがプロジェクトから依存関係を抽出
 2. **統合**: DataIntegratorが異なる形式の抽出結果を統一モデルに変換
-3. **保存**: GraphDatabaseがKùzuにノード（Module、Function、Class）とエッジ（関係性）を保存
-4. **分析・検索**: Services層が高度なクエリとグラフ分析を提供
+3. **正規化**: DataNormalizerがFQNの統一、エイリアス解決を実施
+4. **ロール推論**: RoleInferrerがモジュールの役割を自動推定
+5. **保存**: GraphDatabaseがKùzuにノード（Module、Function、Class）とエッジ（関係性）を保存
+6. **分析・検索**: Services層が高度なクエリとグラフ分析を提供
 
 ## 設定管理
 
@@ -67,8 +83,8 @@ uv run pydepgraph report --output-file report.md
 ## データモデル
 
 ### グラフスキーマ（Kùzu）
-- **Module ノード**: name, file_path, package, lines_of_code, complexity_score等
-- **Function ノード**: name, qualified_name, module_id, cyclomatic_complexity等  
+- **Module ノード**: name, file_path, package, lines_of_code, complexity_score, role等
+- **Function ノード**: name, qualified_name, file_path, cyclomatic_complexity等  
 - **Class ノード**: name, qualified_name, method_count, inheritance_depth等
 - **関係**: ModuleImports, FunctionCalls, Inheritance, Contains
 
@@ -96,37 +112,23 @@ uv run pydepgraph report --output-file report.md
 ## 現在の実装状況
 
 ### 完全動作する機能
-- ✅ **エンドツーエンド分析**: プロジェクト→抽出→データベース保存→検索の完全なパイプライン
+- ✅ **エンドツーエンド分析**: プロジェクト→抽出→正規化→ロール推論→データベース保存→検索の完全なパイプライン
 - ✅ **マルチ抽出器**: Tach、Code2Flow、DependencyFileの統合動作
 - ✅ **グラフデータベース**: Kùzuによる高速なノード・エッジ保存と検索
 - ✅ **メタデータ収集**: lines_of_code、complexity_scoreの正確な取得
-- ✅ **CLI基本機能**: analyze, query, analytics, reportコマンド
+- ✅ **CLI全機能**: analyze, query, analytics, report, evolution, inspectコマンド
 - ✅ **Code2Flow実動作**: 実際のCode2Flow実行による精密な関数レベル解析
-
-### 🚨 未完成機能（Critical）
-
-#### Evolution機能の実装不完全
-- **症状**: `evolution`コマンドがCLIに実装されていない
-- **現状**: 
-  - バックエンドは完全実装済み（SnapshotManager, GraphComparator, EvolutionReporter）
-  - テストファイル存在（tests/test_cli_evolution.py）だが、`cmd_evolution`関数が未実装
-  - READMEでは利用可能と記載されているが実際は使用不可
-- **影響**: 依存関係の進化分析機能が利用できない
-- **必要作業**: 
-  1. CLI parser に evolution サブコマンドを追加
-  2. `cmd_evolution` 関数の実装
-  3. main関数でのルーティング追加
-
-#### Report機能の部分的実装
-- **症状**: `--metrics`、`--sort-by` オプションが実装されていない
-- **現状**: 基本的なreportコマンドは動作するが、高度なメトリクス機能が未完成
-- **影響**: 詳細なメトリクスレポート生成が不可能
+- ✅ **Evolution機能**: Gitコミット間の依存関係グラフ差分検出・レポート
+- ✅ **Reportメトリクス**: `--metrics`、`--sort-by`オプションによる詳細メトリクスレポート
+- ✅ **AST構造検査**: `inspect`コマンドによるLLMフレンドリーなJSON出力
+- ✅ **ロール自動推論**: ディレクトリ名・ファイル名・AST解析によるモジュール役割の自動推定
+- ✅ **FQN正規化**: エイリアス解決、パス→ドット名変換による名前の統一
 
 ### テスト結果
 - **統合テスト**: 7/7成功 ✅
 - **Code2Flow実動作テスト**: 13/13成功 ✅
-- **Evolution CLIテスト**: ImportErrorで失敗 ❌
-- **実用価値**: 基本機能は完全に利用可能、進化分析機能は未利用
+- **CLIレポートテスト**: 1/1成功 ✅
+- **その他単体テスト**: 全パス ✅
 
 ## ログ設計
 

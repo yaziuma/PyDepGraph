@@ -15,6 +15,7 @@ class Module:
     is_external: bool = False
     is_test: bool = False
     extractor: Optional[str] = None
+    role: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)

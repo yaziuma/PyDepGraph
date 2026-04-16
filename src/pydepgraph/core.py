@@ -12,6 +12,8 @@ from .extractors.dependency_file_extractor import DependencyFileExtractor
 from .services.data_integrator import DataIntegrator
 from .models import ExtractionResult
 from .exceptions import PyDepGraphError
+from .role_inferrer import infer_roles_for_modules
+from .normalizer import DataNormalizer
 
 
 logger = logging.getLogger(__name__)
@@ -77,7 +79,16 @@ class PyDepGraphCore:
             logger.info("Integrating extraction results...")
             integrator = DataIntegrator()
             integrated_result = integrator.integrate_results(extraction_results)
-            
+
+            # Normalize FQNs and resolve aliases
+            logger.info("Normalizing FQNs...")
+            normalizer = DataNormalizer(str(project_path))
+            integrated_result = normalizer.normalize(integrated_result)
+
+            # Infer roles for modules
+            logger.info("Inferring module roles...")
+            integrated_result.modules = infer_roles_for_modules(integrated_result.modules)
+
             logger.info(f"Integration complete - {len(integrated_result.modules)} modules, "
                        f"{len(integrated_result.functions)} functions, "
                        f"{len(integrated_result.classes)} classes")
@@ -115,7 +126,8 @@ class PyDepGraphCore:
                 "lines_of_code": module.lines_of_code or 0,
                 "complexity_score": module.complexity_score or 0.0,
                 "is_external": module.is_external,
-                "is_test": module.is_test
+                "is_test": module.is_test,
+                "role": module.role or ""
             })
         
         functions_data = []
@@ -146,20 +158,29 @@ class PyDepGraphCore:
                 "is_abstract": cls.is_abstract
             })
         
-        # Create mapping for relationships - file_path and name as keys
+        # Create mapping for relationships - multiple resolution strategies
         module_path_to_id = {module["file_path"]: module["id"] for module in modules_data}
         module_name_to_id = {module["name"]: module["id"] for module in modules_data}
+        # Also map by package name for additional fallback
+        module_package_to_id = {module["package"]: module["id"] for module in modules_data if module.get("package")}
         function_name_to_id = {func["qualified_name"]: func["id"] for func in functions_data}
         class_name_to_id = {cls["qualified_name"]: cls["id"] for cls in classes_data}
+
+        def resolve_module_id(name: str):
+            """Resolve a module name to its database ID using multiple strategies."""
+            return (
+                module_path_to_id.get(name)
+                or module_name_to_id.get(name)
+                or module_package_to_id.get(name)
+            )
         
         logger.debug(f"Class name to ID mapping keys: {list(class_name_to_id.keys())[:5]}")
         
-        # Module imports - file_pathでマッピング
+        # Module imports - multiple resolution strategies
         imports_data = []
         for i, imp in enumerate(result.module_imports, 1):
-            # Try to resolve by path first, then by name.
-            source_id = module_path_to_id.get(imp.source_module) or module_name_to_id.get(imp.source_module)
-            target_id = module_path_to_id.get(imp.target_module) or module_name_to_id.get(imp.target_module)
+            source_id = resolve_module_id(imp.source_module)
+            target_id = resolve_module_id(imp.target_module)
             
             if source_id and target_id:
                 imports_data.append({

@@ -92,6 +92,10 @@ class PyDepGraphCore:
             logger.info(f"Integration complete - {len(integrated_result.modules)} modules, "
                        f"{len(integrated_result.functions)} functions, "
                        f"{len(integrated_result.classes)} classes")
+
+            # 現在分析対象のプロジェクトに属する既存データのみを削除してから再投入する
+            logger.info("Cleaning up existing project-scoped data before insert...")
+            self.database.delete_project_data(str(project_path))
             
             # Store in database
             logger.info("Storing results in database...")

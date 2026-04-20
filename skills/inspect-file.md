@@ -1,40 +1,51 @@
-指定された Python ファイルの公開インターフェースを、ソース全体を読むより少ないトークンで把握してください。
+# inspect-file
 
-対象: $ARGUMENTS
+指定された Python ファイルを、**最小トークンで正確に理解**するための手順。
 
+対象: `$ARGUMENTS`（例: `src/pydepgraph/core.py`）
+
+---
+
+## 基本手順（必須）
+
+### 1) まず骨格だけ取る
 ```bash
 uv run pydepgraph inspect $ARGUMENTS --skeleton
 ```
 
-まずスケルトンを解析し、以下を整理して報告:
-- **クラス一覧**: クラス名、基底クラス、メソッドシグネチャ、クラス変数
-- **関数一覧**: シグネチャ（引数名、型、デフォルト値、戻り値型）、デコレータ
-- **モジュールレベル**: import 一覧、定数、モジュール docstring
+ここでは以下のみ把握する:
+- クラス名 / 継承関係
+- 関数・メソッドのシグネチャ
+- 定数・docstring・import
 
-特定関数の詳細実装が必要な場合のみ、以下を実行:
-
-```bash
-uv run pydepgraph inspect $ARGUMENTS --target-function <function_name>
-```
-
-関連コードの「検索」を最小トークンで行う場合は、次の順で段階的に実行:
-
-1. まず定義名ベースで絞り込み（関数/クラスの一覧把握）
-
-```bash
-uv run pydepgraph inspect $ARGUMENTS --skeleton
-```
-
-2. 依存周辺を薄く確認（依存先は骨格のみ）
-
+### 2) 周辺依存を薄く取る（必要時）
 ```bash
 uv run pydepgraph query context --target $ARGUMENTS --depth 1
 ```
 
-3. それでも不足する場合のみ、ピンポイントで詳細化
-   - 対象関数がわかる: `--target-function`
-   - 依存範囲を広げる: `--depth 2` 以上
+- 依存先は skeleton
+- 対象ファイルは full 実装
 
-LLM向け運用ルール:
-- いきなりファイル全体を読まず、**skeleton → context → target-function** の順で情報量を増やす。
-- 回答では、まず公開インターフェース（シグネチャ）を要約し、実装詳細は必要箇所だけ引用する。
+### 3) ピンポイント詳細（必要時）
+```bash
+uv run pydepgraph inspect $ARGUMENTS --target-function <function_name>
+```
+
+---
+
+## 判断ルール
+
+- 最初から全文を読まない。
+- 原則: **skeleton → context → target-function** の順で情報を増やす。
+- 深さを増やすのは、`--depth 1` で足りないときだけ。
+
+---
+
+## 回答テンプレート
+
+1. **概要**: このファイルの責務（1〜2文）
+2. **公開インターフェース**: クラス/関数シグネチャ一覧
+3. **依存関係**: 主要な依存先（必要なものだけ）
+4. **詳細実装（必要箇所のみ）**: `--target-function` で取得した内容を要約
+
+不要な長文転記は禁止。要点のみを返すこと。

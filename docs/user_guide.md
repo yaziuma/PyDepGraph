@@ -114,10 +114,16 @@ uv run pydepgraph query <QUERY_TYPE> [OPTIONS]
     *   `classes`: 全てのクラス
     *   `imports`: モジュール間のインポート関係
     *   `calls`: 関数間の呼び出し関係
+    *   `role`: 推定ロールでのモジュール検索（`--value` 必須）
+    *   `context`: LLM向けコンテキスト出力（依存は骨格、対象はフル実装）
 
 **オプション:**
 *   `--filter <TEXT>`: 結果を名前に基づいてフィルタリングします。
 *   `--format <json|table>`: 出力形式（デフォルト: `table`）。
+*   `--value <ROLE>`: `role` クエリ時のロール値。
+*   `--target <PATH>`: `context` クエリ時の対象ファイル。
+*   `--depth <N>`: `context` クエリ時の依存探索深さ（デフォルト: `1`）。
+*   `--project-root <PATH>`: `context` クエリ時のプロジェクトルート。
 
 **使用例:**
 ```bash
@@ -129,7 +135,30 @@ uv run pydepgraph query functions --filter user
 
 # インポート関係をJSON形式で出力
 uv run pydepgraph query imports --format json
+
+# service ロールのモジュール検索
+uv run pydepgraph query role --value service
+
+# LLM向けコンテキスト出力（依存=骨格 / 対象=フル）
+uv run pydepgraph query context --target src/pydepgraph/core.py --depth 1
 ```
+
+### 3.2.1. `inspect` の実用的な使い方（LLM向け）
+
+`inspect` は JSON だけでなく、スケルトン表示と関数単位の詳細表示が可能です。
+
+```bash
+# 1) まずは骨格だけ確認
+uv run pydepgraph inspect src/pydepgraph/core.py --skeleton
+
+# 2) 依存周辺も含めて確認
+uv run pydepgraph query context --target src/pydepgraph/core.py --depth 1
+
+# 3) 必要な関数のみ詳細表示
+uv run pydepgraph inspect src/pydepgraph/core.py --target-function analyze
+```
+
+推奨フローは **skeleton → context → target-function** です。これにより、不要な実装全文を読まずに調査できます。
 
 ### 3.3. `analytics`
 

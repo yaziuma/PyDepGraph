@@ -1,6 +1,9 @@
 from pathlib import Path
 
+from pydepgraph.config import Config
+from pydepgraph.core import PyDepGraphCore
 from pydepgraph.database import GraphDatabase
+from pydepgraph.models import Class, Contains, ExtractionResult, Function, Module
 
 
 def test_delete_project_data_is_project_scoped_and_preserves_other_projects(tmp_path: Path):
@@ -267,6 +270,59 @@ def test_delete_project_data_removes_only_absolute_project_prefix_matches(tmp_pa
 
     assert _count(db, "MATCH (m:Module) WHERE m.id = 'm_abs' RETURN count(m) AS cnt") == 0
     assert _count(db, "MATCH (m:Module) WHERE m.id = 'm_relative' RETURN count(m) AS cnt") == 1
+
+
+def test_contains_relationships_can_be_restored_after_project_cleanup(tmp_path: Path):
+    db_path = tmp_path / "graph.db"
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    module_path = project_root / "mod.py"
+
+    db = GraphDatabase(str(db_path))
+    db.initialize_schema()
+
+    config = Config.get_default_config()
+    core = PyDepGraphCore(config)
+    core.database = db
+
+    result = ExtractionResult(
+        modules=[Module(name="project.mod", file_path=str(module_path), package="project")],
+        functions=[
+            Function(
+                name="method",
+                qualified_name="project.mod.MyClass.method",
+                file_path=str(module_path),
+                is_method=True,
+            )
+        ],
+        classes=[
+            Class(
+                name="MyClass",
+                qualified_name="project.mod.MyClass",
+                file_path=str(module_path),
+            )
+        ],
+        module_imports=[],
+        function_calls=[],
+        inheritance=[],
+        contains=[
+            Contains(
+                container="project.mod.MyClass",
+                contained="project.mod.MyClass.method",
+                contained_type="function",
+            )
+        ],
+        metadata={},
+    )
+
+    core._store_results(result)
+    assert _count(db, "MATCH (:Class)-[r:Contains]->(:Function) RETURN count(r) AS cnt") == 1
+
+    db.delete_project_data(str(project_root))
+    assert _count(db, "MATCH (:Class)-[r:Contains]->(:Function) RETURN count(r) AS cnt") == 0
+
+    core._store_results(result)
+    assert _count(db, "MATCH (:Class)-[r:Contains]->(:Function) RETURN count(r) AS cnt") == 1
 
 
 def _count(db: GraphDatabase, query: str, params=None) -> int:

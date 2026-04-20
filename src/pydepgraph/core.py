@@ -240,12 +240,43 @@ class PyDepGraphCore:
                 if i <= 3:  # 最初の数件の詳細ログ
                     logger.debug(f"  Available class names: {list(class_name_to_id.keys())[:3]}")
                     logger.debug(f"  Looking for: child='{inh.child_class}', parent='{inh.parent_class}'")
+
+        # Contains relationships (Class -> Function only)
+        contains_data = []
+        for i, contains in enumerate(result.contains, 1):
+            if str(contains.contained_type).lower() != "function":
+                logger.debug(
+                    "Skipping contains relationship with unsupported contained_type: "
+                    f"{contains.container} -> {contains.contained} ({contains.contained_type})"
+                )
+                continue
+
+            source_id = class_name_to_id.get(contains.container)
+            target_id = function_name_to_id.get(contains.contained)
+
+            if source_id and target_id:
+                contains_data.append({
+                    "id": str(i),
+                    "relationship_type": "Contains",
+                    "source_class_id": source_id,
+                    "target_function_id": target_id,
+                    "line_number": getattr(contains, "line_number", 0) or 0,
+                })
+            else:
+                logger.debug(
+                    "Skipping contains relationship: "
+                    f"{contains.container} -> {contains.contained} "
+                    f"(source_id: {source_id}, target_id: {target_id})"
+                )
         
         # Bulk insert into database with detailed logging
         logger.info(f"Preparing to insert: {len(modules_data)} modules, {len(functions_data)} functions, {len(classes_data)} classes")
-        logger.info(f"Relationships: {len(imports_data)} imports, {len(calls_data)} function calls, {len(inheritance_data)} inheritance")
+        logger.info(
+            f"Relationships: {len(imports_data)} imports, {len(calls_data)} function calls, "
+            f"{len(inheritance_data)} inheritance, {len(contains_data)} contains"
+        )
         
-        with tqdm(total=6, desc="Storing data in database") as pbar:
+        with tqdm(total=7, desc="Storing data in database") as pbar:
             if modules_data:
                 self.database.bulk_insert_modules(modules_data)
             pbar.update(1)
@@ -268,6 +299,10 @@ class PyDepGraphCore:
             
             if inheritance_data:
                 self.database.bulk_insert_inheritance(inheritance_data)
+            pbar.update(1)
+
+            if contains_data:
+                self.database.bulk_insert_contains(contains_data)
             pbar.update(1)
     
     def close(self):

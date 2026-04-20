@@ -3,6 +3,7 @@ import kuzu
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -55,25 +56,17 @@ class GraphDatabase:
 
     def delete_project_data(self, project_root: str) -> None:
         """指定プロジェクト配下の既存グラフデータのみを削除する。"""
-        normalized_root = Path(project_root).resolve()
-        normalized_root_str = str(normalized_root)
-        basename = normalized_root.name
+        normalized_root_str = self._normalize_project_root(project_root)
+        params = self._build_project_scope_params(normalized_root_str)
 
         logger.info(
             "Deleting existing graph data for project scope: %s",
             normalized_root_str,
         )
 
-        # 絶対パス / 相対パスが混在するケースに備えて、保守的に複数条件で照合する。
-        # false positive を避けるため、曖昧な条件は使わない。
-        params = {
-            "project_root": normalized_root_str,
-            "project_prefix_slash": f"{normalized_root_str}/",
-            "project_prefix_backslash": f"{normalized_root_str}\\",
-            "project_basename": basename,
-            "project_basename_prefix_slash": f"{basename}/",
-            "project_basename_prefix_backslash": f"{basename}\\",
-        }
+        # basename のみでの照合は誤削除(同名別プロジェクト)を引き起こすため廃止。
+        # 安全に帰属判定できる「絶対パスの完全一致 / 直下配下一致」のみ削除対象にする。
+        # そのため、相対パスとして保存された古い行は残る場合がある(意図した保守的挙動)。
 
         relationship_delete_queries = [
             """
@@ -82,22 +75,24 @@ class GraphDatabase:
                 (
                     source.file_path IS NOT NULL AND source.file_path <> "" AND (
                         source.file_path = $project_root OR
+                        source.file_path = $project_root_posix OR
+                        source.file_path = $project_root_windows OR
                         source.file_path STARTS WITH $project_prefix_slash OR
                         source.file_path STARTS WITH $project_prefix_backslash OR
-                        source.file_path = $project_basename OR
-                        source.file_path STARTS WITH $project_basename_prefix_slash OR
-                        source.file_path STARTS WITH $project_basename_prefix_backslash
+                        source.file_path STARTS WITH $project_prefix_posix_slash OR
+                        source.file_path STARTS WITH $project_prefix_windows_backslash
                     )
                 )
                 OR
                 (
                     target.file_path IS NOT NULL AND target.file_path <> "" AND (
                         target.file_path = $project_root OR
+                        target.file_path = $project_root_posix OR
+                        target.file_path = $project_root_windows OR
                         target.file_path STARTS WITH $project_prefix_slash OR
                         target.file_path STARTS WITH $project_prefix_backslash OR
-                        target.file_path = $project_basename OR
-                        target.file_path STARTS WITH $project_basename_prefix_slash OR
-                        target.file_path STARTS WITH $project_basename_prefix_backslash
+                        target.file_path STARTS WITH $project_prefix_posix_slash OR
+                        target.file_path STARTS WITH $project_prefix_windows_backslash
                     )
                 )
             DELETE r
@@ -108,22 +103,24 @@ class GraphDatabase:
                 (
                     source.file_path IS NOT NULL AND source.file_path <> "" AND (
                         source.file_path = $project_root OR
+                        source.file_path = $project_root_posix OR
+                        source.file_path = $project_root_windows OR
                         source.file_path STARTS WITH $project_prefix_slash OR
                         source.file_path STARTS WITH $project_prefix_backslash OR
-                        source.file_path = $project_basename OR
-                        source.file_path STARTS WITH $project_basename_prefix_slash OR
-                        source.file_path STARTS WITH $project_basename_prefix_backslash
+                        source.file_path STARTS WITH $project_prefix_posix_slash OR
+                        source.file_path STARTS WITH $project_prefix_windows_backslash
                     )
                 )
                 OR
                 (
                     target.file_path IS NOT NULL AND target.file_path <> "" AND (
                         target.file_path = $project_root OR
+                        target.file_path = $project_root_posix OR
+                        target.file_path = $project_root_windows OR
                         target.file_path STARTS WITH $project_prefix_slash OR
                         target.file_path STARTS WITH $project_prefix_backslash OR
-                        target.file_path = $project_basename OR
-                        target.file_path STARTS WITH $project_basename_prefix_slash OR
-                        target.file_path STARTS WITH $project_basename_prefix_backslash
+                        target.file_path STARTS WITH $project_prefix_posix_slash OR
+                        target.file_path STARTS WITH $project_prefix_windows_backslash
                     )
                 )
             DELETE r
@@ -134,22 +131,24 @@ class GraphDatabase:
                 (
                     source.file_path IS NOT NULL AND source.file_path <> "" AND (
                         source.file_path = $project_root OR
+                        source.file_path = $project_root_posix OR
+                        source.file_path = $project_root_windows OR
                         source.file_path STARTS WITH $project_prefix_slash OR
                         source.file_path STARTS WITH $project_prefix_backslash OR
-                        source.file_path = $project_basename OR
-                        source.file_path STARTS WITH $project_basename_prefix_slash OR
-                        source.file_path STARTS WITH $project_basename_prefix_backslash
+                        source.file_path STARTS WITH $project_prefix_posix_slash OR
+                        source.file_path STARTS WITH $project_prefix_windows_backslash
                     )
                 )
                 OR
                 (
                     target.file_path IS NOT NULL AND target.file_path <> "" AND (
                         target.file_path = $project_root OR
+                        target.file_path = $project_root_posix OR
+                        target.file_path = $project_root_windows OR
                         target.file_path STARTS WITH $project_prefix_slash OR
                         target.file_path STARTS WITH $project_prefix_backslash OR
-                        target.file_path = $project_basename OR
-                        target.file_path STARTS WITH $project_basename_prefix_slash OR
-                        target.file_path STARTS WITH $project_basename_prefix_backslash
+                        target.file_path STARTS WITH $project_prefix_posix_slash OR
+                        target.file_path STARTS WITH $project_prefix_windows_backslash
                     )
                 )
             DELETE r
@@ -160,22 +159,24 @@ class GraphDatabase:
                 (
                     source.file_path IS NOT NULL AND source.file_path <> "" AND (
                         source.file_path = $project_root OR
+                        source.file_path = $project_root_posix OR
+                        source.file_path = $project_root_windows OR
                         source.file_path STARTS WITH $project_prefix_slash OR
                         source.file_path STARTS WITH $project_prefix_backslash OR
-                        source.file_path = $project_basename OR
-                        source.file_path STARTS WITH $project_basename_prefix_slash OR
-                        source.file_path STARTS WITH $project_basename_prefix_backslash
+                        source.file_path STARTS WITH $project_prefix_posix_slash OR
+                        source.file_path STARTS WITH $project_prefix_windows_backslash
                     )
                 )
                 OR
                 (
                     target.file_path IS NOT NULL AND target.file_path <> "" AND (
                         target.file_path = $project_root OR
+                        target.file_path = $project_root_posix OR
+                        target.file_path = $project_root_windows OR
                         target.file_path STARTS WITH $project_prefix_slash OR
                         target.file_path STARTS WITH $project_prefix_backslash OR
-                        target.file_path = $project_basename OR
-                        target.file_path STARTS WITH $project_basename_prefix_slash OR
-                        target.file_path STARTS WITH $project_basename_prefix_backslash
+                        target.file_path STARTS WITH $project_prefix_posix_slash OR
+                        target.file_path STARTS WITH $project_prefix_windows_backslash
                     )
                 )
             DELETE r
@@ -188,11 +189,12 @@ class GraphDatabase:
             WHERE
                 m.file_path IS NOT NULL AND m.file_path <> "" AND (
                     m.file_path = $project_root OR
+                    m.file_path = $project_root_posix OR
+                    m.file_path = $project_root_windows OR
                     m.file_path STARTS WITH $project_prefix_slash OR
                     m.file_path STARTS WITH $project_prefix_backslash OR
-                    m.file_path = $project_basename OR
-                    m.file_path STARTS WITH $project_basename_prefix_slash OR
-                    m.file_path STARTS WITH $project_basename_prefix_backslash
+                    m.file_path STARTS WITH $project_prefix_posix_slash OR
+                    m.file_path STARTS WITH $project_prefix_windows_backslash
                 )
             DELETE m
             """,
@@ -201,11 +203,12 @@ class GraphDatabase:
             WHERE
                 f.file_path IS NOT NULL AND f.file_path <> "" AND (
                     f.file_path = $project_root OR
+                    f.file_path = $project_root_posix OR
+                    f.file_path = $project_root_windows OR
                     f.file_path STARTS WITH $project_prefix_slash OR
                     f.file_path STARTS WITH $project_prefix_backslash OR
-                    f.file_path = $project_basename OR
-                    f.file_path STARTS WITH $project_basename_prefix_slash OR
-                    f.file_path STARTS WITH $project_basename_prefix_backslash
+                    f.file_path STARTS WITH $project_prefix_posix_slash OR
+                    f.file_path STARTS WITH $project_prefix_windows_backslash
                 )
             DELETE f
             """,
@@ -214,11 +217,12 @@ class GraphDatabase:
             WHERE
                 c.file_path IS NOT NULL AND c.file_path <> "" AND (
                     c.file_path = $project_root OR
+                    c.file_path = $project_root_posix OR
+                    c.file_path = $project_root_windows OR
                     c.file_path STARTS WITH $project_prefix_slash OR
                     c.file_path STARTS WITH $project_prefix_backslash OR
-                    c.file_path = $project_basename OR
-                    c.file_path STARTS WITH $project_basename_prefix_slash OR
-                    c.file_path STARTS WITH $project_basename_prefix_backslash
+                    c.file_path STARTS WITH $project_prefix_posix_slash OR
+                    c.file_path STARTS WITH $project_prefix_windows_backslash
                 )
             DELETE c
             """,
@@ -231,6 +235,25 @@ class GraphDatabase:
             self.connection.execute(query, params)
 
         logger.info("Project-scoped graph cleanup completed: %s", normalized_root_str)
+
+    def _normalize_project_root(self, project_root: str) -> str:
+        """プロジェクトルートを削除判定向けに正規化した絶対パス文字列へ変換する。"""
+        return os.path.normpath(str(Path(project_root).resolve()))
+
+    def _build_project_scope_params(self, normalized_root_str: str) -> Dict[str, str]:
+        """削除クエリで利用する安全な project scope のパラメータを構築する。"""
+        root_posix = normalized_root_str.replace("\\", "/")
+        root_windows = normalized_root_str.replace("/", "\\")
+
+        return {
+            "project_root": normalized_root_str,
+            "project_root_posix": root_posix,
+            "project_root_windows": root_windows,
+            "project_prefix_slash": f"{normalized_root_str}/",
+            "project_prefix_backslash": f"{normalized_root_str}\\",
+            "project_prefix_posix_slash": f"{root_posix}/",
+            "project_prefix_windows_backslash": f"{root_windows}\\",
+        }
 
     def _drop_existing_tables(self) -> None:
         """既存テーブルの削除（開発時用）"""

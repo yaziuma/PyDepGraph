@@ -185,6 +185,90 @@ def test_delete_project_data_is_project_scoped_and_preserves_other_projects(tmp_
     assert _count(db, "MATCH (:Class)-[r:Contains]->(:Function) RETURN count(r) AS cnt") == 1
 
 
+def test_delete_project_data_does_not_match_by_basename_only(tmp_path: Path):
+    db_path = tmp_path / "graph.db"
+    project_x = tmp_path / "x" / "app"
+    project_y = tmp_path / "y" / "app"
+    project_x.mkdir(parents=True)
+    project_y.mkdir(parents=True)
+
+    db = GraphDatabase(str(db_path))
+    db.initialize_schema()
+
+    db.bulk_insert_modules(
+        [
+            {
+                "id": "m_x",
+                "name": "module_x",
+                "file_path": str(project_x / "main.py"),
+                "package": "x",
+                "lines_of_code": 10,
+                "complexity_score": 1.0,
+                "is_external": False,
+                "is_test": False,
+                "role": "",
+            },
+            {
+                "id": "m_y",
+                "name": "module_y",
+                "file_path": str(project_y / "main.py"),
+                "package": "y",
+                "lines_of_code": 20,
+                "complexity_score": 1.0,
+                "is_external": False,
+                "is_test": False,
+                "role": "",
+            },
+        ]
+    )
+
+    db.delete_project_data(str(project_x))
+
+    assert _count(db, "MATCH (m:Module) WHERE m.file_path STARTS WITH $p RETURN count(m) AS cnt", {"p": str(project_x)}) == 0
+    assert _count(db, "MATCH (m:Module) WHERE m.file_path STARTS WITH $p RETURN count(m) AS cnt", {"p": str(project_y)}) == 1
+
+
+def test_delete_project_data_removes_only_absolute_project_prefix_matches(tmp_path: Path):
+    db_path = tmp_path / "graph.db"
+    project_root = tmp_path / "target"
+    project_root.mkdir()
+
+    db = GraphDatabase(str(db_path))
+    db.initialize_schema()
+
+    db.bulk_insert_modules(
+        [
+            {
+                "id": "m_abs",
+                "name": "module_abs",
+                "file_path": str(project_root / "pkg" / "mod.py"),
+                "package": "pkg",
+                "lines_of_code": 10,
+                "complexity_score": 1.0,
+                "is_external": False,
+                "is_test": False,
+                "role": "",
+            },
+            {
+                "id": "m_relative",
+                "name": "module_relative",
+                "file_path": "target/pkg/mod.py",
+                "package": "pkg",
+                "lines_of_code": 10,
+                "complexity_score": 1.0,
+                "is_external": False,
+                "is_test": False,
+                "role": "",
+            },
+        ]
+    )
+
+    db.delete_project_data(str(project_root))
+
+    assert _count(db, "MATCH (m:Module) WHERE m.id = 'm_abs' RETURN count(m) AS cnt") == 0
+    assert _count(db, "MATCH (m:Module) WHERE m.id = 'm_relative' RETURN count(m) AS cnt") == 1
+
+
 def _count(db: GraphDatabase, query: str, params=None) -> int:
     rows = db.execute_query(query, params)
     return int(rows[0]["cnt"])

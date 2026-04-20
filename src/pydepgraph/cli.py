@@ -78,7 +78,7 @@ def create_parser() -> argparse.ArgumentParser:
     query_parser = subparsers.add_parser('query', help='Query dependency relationships')
     query_parser.add_argument(
         'query_type',
-        choices=['modules', 'functions', 'classes', 'imports', 'calls', 'role'],
+        choices=['modules', 'functions', 'classes', 'imports', 'calls', 'role', 'context'],
         help='Type of entities to query'
     )
     query_parser.add_argument(
@@ -101,6 +101,20 @@ def create_parser() -> argparse.ArgumentParser:
     query_parser.add_argument(
         '--value',
         help='Role value to filter by (for role query)'
+    )
+    query_parser.add_argument(
+        '--target',
+        help='Target Python file path for context query'
+    )
+    query_parser.add_argument(
+        '--depth',
+        type=int,
+        default=1,
+        help='Dependency depth for context query (default: 1)'
+    )
+    query_parser.add_argument(
+        '--project-root',
+        help='Project root path for local module resolution in context query'
     )
     
     # analytics command
@@ -184,6 +198,15 @@ def create_parser() -> argparse.ArgumentParser:
         choices=['json', 'table'],
         default='json',
         help='Output format (default: json)'
+    )
+    inspect_parser.add_argument(
+        '--skeleton',
+        action='store_true',
+        help='Output Python skeleton instead of JSON/table'
+    )
+    inspect_parser.add_argument(
+        '--target-function',
+        help='Output full source for a specific function name in target file'
     )
 
     return parser
@@ -286,6 +309,19 @@ def cmd_analyze(args: argparse.Namespace, config: Config) -> int:
 def cmd_query(args: argparse.Namespace, config: Config) -> int:
     """query コマンドの実行"""
     try:
+        if args.query_type == 'context':
+            if not args.target:
+                print("Error: --target is required for context query", file=sys.stderr)
+                return 1
+            from .inspect import render_context
+            output = render_context(
+                target=args.target,
+                depth=getattr(args, 'depth', 1),
+                project_root=getattr(args, 'project_root', None),
+            )
+            print(output)
+            return 0
+
         # Initialize database and services
         database = GraphDatabase(config.database.path)
         query_service = ExtendedQueryService(database)
@@ -519,7 +555,16 @@ def cmd_evolution(args: argparse.Namespace, config: Config) -> int:
 def cmd_inspect(args: argparse.Namespace, config: Config) -> int:
     """inspect コマンドの実行 - LLMフレンドリーなAST構造要約"""
     try:
-        from .inspect import inspect_target
+        from .inspect import inspect_target, render_skeleton, render_target_function
+
+        if getattr(args, 'target_function', None):
+            print(render_target_function(args.target, args.target_function))
+            return 0
+
+        if getattr(args, 'skeleton', False):
+            print(render_skeleton(args.target))
+            return 0
+
         result = inspect_target(args.target)
 
         output_format = getattr(args, 'format', 'json')

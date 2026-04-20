@@ -6,6 +6,7 @@ import ast
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 import logging
+import sys
 
 from .base import ExtractorBase, RawExtractionResult
 from ..exceptions import PrologExecutionError
@@ -13,6 +14,11 @@ from ..utils.metadata_collector import MetadataCollector
 from ..utils.definition_indexer import DefinitionIndexer
 
 logger = logging.getLogger(__name__)
+
+try:
+    import jedi
+except ImportError:  # pragma: no cover - optional fallback
+    jedi = None
 
 
 # +++ NEW VISITOR CLASSES FOR CROSS-FILE RESOLUTION +++
@@ -43,13 +49,17 @@ class _ImportVisitor(ast.NodeVisitor):
 
 
 class _CallResolverVisitor(ast.NodeVisitor):
-    def __init__(self, module_fqn: str, definition_index: Dict, import_map: Dict):
+    def __init__(self, module_fqn: str, definition_index: Dict, import_map: Dict, source_code: str, file_path: Path):
         self.module_fqn = module_fqn
         self.definition_index = definition_index
         self.import_map = import_map
         self.scope_stack: List[str] = [module_fqn]
         self.calls: List[Dict[str, Any]] = []
         self.variable_types: Dict[str, str] = {}
+        self.file_path = file_path
+        self.jedi_script = None
+        if jedi is not None:
+            self.jedi_script = jedi.Script(code=source_code, path=str(file_path))
 
     def _get_current_fqn_from_scope(self) -> str:
         return ".".join(self.scope_stack)
@@ -86,6 +96,8 @@ class _CallResolverVisitor(ast.NodeVisitor):
 
     def visit_Call(self, node: ast.Call):
         target_fqn = self._resolve_call_target(node.func)
+        if not target_fqn:
+            target_fqn = self._resolve_call_target_with_jedi(node.func)
 
         if target_fqn and target_fqn in self.definition_index:
             if self.definition_index[target_fqn]['node_type'] in ('function', 'method'):
@@ -96,6 +108,31 @@ class _CallResolverVisitor(ast.NodeVisitor):
                         "data": { "source_function": source_fqn, "target_function": target_fqn, "call_type": "direct", "line_number": node.lineno, "extractor": "code2flow_ast_cross_file" }
                     })
         self.generic_visit(node)
+
+    def _resolve_call_target_with_jedi(self, node: ast.expr) -> Optional[str]:
+        if self.jedi_script is None:
+            return None
+        if getattr(node, "lineno", None) is None:
+            return None
+        end_col = getattr(node, "end_col_offset", None)
+        col = end_col - 1 if end_col and end_col > 0 else getattr(node, "col_offset", 0)
+        try:
+            inferred = self.jedi_script.infer(line=node.lineno, column=col)
+        except Exception:
+            return None
+
+        for candidate in inferred:
+            full_name = getattr(candidate, "full_name", None)
+            if full_name and full_name in self.definition_index:
+                return full_name
+
+            module_name = getattr(candidate, "module_name", None)
+            name = getattr(candidate, "name", None)
+            if module_name and name:
+                fqn = f"{module_name}.{name}"
+                if fqn in self.definition_index:
+                    return fqn
+        return None
 
     def _resolve_call_target(self, node: ast.expr) -> Optional[str]:
         if isinstance(node, ast.Name):
@@ -155,6 +192,8 @@ class Code2FlowExtractor(ExtractorBase):
         definition_index = indexer.index_project()
         all_relationships = []
         project_root = Path(project_path)
+        if jedi is not None:
+            sys.path.insert(0, str(project_root))
         for py_file in project_root.rglob("*.py"):
             try:
                 with open(py_file, "r", encoding="utf-8") as f:
@@ -163,11 +202,19 @@ class Code2FlowExtractor(ExtractorBase):
                 module_fqn = indexer._get_module_fqn(py_file)
                 import_visitor = _ImportVisitor(module_fqn)
                 import_visitor.visit(tree)
-                call_visitor = _CallResolverVisitor(module_fqn, definition_index, import_visitor.imports)
+                call_visitor = _CallResolverVisitor(
+                    module_fqn,
+                    definition_index,
+                    import_visitor.imports,
+                    source_code,
+                    py_file,
+                )
                 call_visitor.visit(tree)
                 all_relationships.extend(call_visitor.calls)
             except Exception as e:
                 logger.warning(f"Failed to analyze {py_file} for cross-file calls: {e}", exc_info=True)
+        if jedi is not None and str(project_root) in sys.path:
+            sys.path.remove(str(project_root))
         functions = [v for v in definition_index.values() if v['node_type'] in ('function', 'method')]
         classes = [v for v in definition_index.values() if v['node_type'] == 'class']
         return RawExtractionResult(

@@ -25,13 +25,23 @@ class GraphDatabase:
         logger.info(f"Graph database initialized at: {self.db_path}")
 
     def initialize_schema(self) -> None:
-        """グラフデータベースのスキーマを初期化"""
+        """グラフデータベースのスキーマを初期化（非破壊）"""
+        logger.info("Initializing database schema (non-destructive)...")
 
-        logger.info("Initializing database schema...")
+        # 通常初期化では既存テーブルを削除しない
+        self._create_tables_if_needed()
 
-        # 既存テーブルの確認と削除（開発時）
+        logger.info("Database schema initialized successfully")
+
+    def reset_schema(self) -> None:
+        """グラフデータベースのスキーマを再作成（破壊的）"""
+        logger.warning("Resetting database schema (destructive)...")
         self._drop_existing_tables()
+        self._create_tables_if_needed()
+        logger.info("Database schema reset successfully")
 
+    def _create_tables_if_needed(self) -> None:
+        """必要なテーブルを作成"""
         # ノードテーブル作成
         self._create_module_table()
         self._create_function_table()
@@ -42,8 +52,6 @@ class GraphDatabase:
         self._create_function_calls_table()
         self._create_inheritance_table()
         self._create_contains_table()
-
-        logger.info("Database schema initialized successfully")
 
     def _drop_existing_tables(self) -> None:
         """既存テーブルの削除（開発時用）"""
@@ -62,109 +70,130 @@ class GraphDatabase:
 
     def _create_module_table(self) -> None:
         """Moduleノードテーブル作成"""
-        query = """
-        CREATE NODE TABLE Module (
-            id STRING,
-            name STRING,
-            file_path STRING,
-            package STRING,
-            lines_of_code INT32,
-            complexity_score DOUBLE,
-            is_external BOOLEAN,
-            is_test BOOLEAN,
-            role STRING,
-            PRIMARY KEY (id)
-        );
-        """
-        self.connection.execute(query)
-        logger.debug("Module table created")
+        try:
+            query = """
+            CREATE NODE TABLE Module (
+                id STRING,
+                name STRING,
+                file_path STRING,
+                package STRING,
+                lines_of_code INT32,
+                complexity_score DOUBLE,
+                is_external BOOLEAN,
+                is_test BOOLEAN,
+                role STRING,
+                PRIMARY KEY (id)
+            );
+            """
+            self.connection.execute(query)
+            logger.debug("Module table created")
+        except Exception as e:
+            logger.debug(f"Module table already exists or create skipped: {e}")
 
     def _create_module_imports_table(self) -> None:
         """ModuleImportsエッジテーブル作成"""
-        query = """
-        CREATE REL TABLE ModuleImports (
-            FROM Module TO Module,
-            import_type STRING,
-            import_alias STRING,
-            line_number INT32,
-            is_conditional BOOLEAN
-        );
-        """
-        self.connection.execute(query)
-        logger.debug("ModuleImports table created")
+        try:
+            query = """
+            CREATE REL TABLE ModuleImports (
+                FROM Module TO Module,
+                import_type STRING,
+                import_alias STRING,
+                line_number INT32,
+                is_conditional BOOLEAN
+            );
+            """
+            self.connection.execute(query)
+            logger.debug("ModuleImports table created")
+        except Exception as e:
+            logger.debug(f"ModuleImports table already exists or create skipped: {e}")
 
     def _create_function_table(self) -> None:
         """Functionノードテーブル作成"""
-        query = """
-        CREATE NODE TABLE Function (
-            id STRING,
-            name STRING,
-            qualified_name STRING,
-            file_path STRING,
-            line_number INT32,
-            cyclomatic_complexity INT32,
-            parameter_count INT32,
-            is_method BOOLEAN,
-            is_static BOOLEAN,
-            is_class_method BOOLEAN,
-            class_id STRING,
-            PRIMARY KEY (id)
-        );
-        """
-        self.connection.execute(query)
-        logger.debug("Function table created")
+        try:
+            query = """
+            CREATE NODE TABLE Function (
+                id STRING,
+                name STRING,
+                qualified_name STRING,
+                file_path STRING,
+                line_number INT32,
+                cyclomatic_complexity INT32,
+                parameter_count INT32,
+                is_method BOOLEAN,
+                is_static BOOLEAN,
+                is_class_method BOOLEAN,
+                class_id STRING,
+                PRIMARY KEY (id)
+            );
+            """
+            self.connection.execute(query)
+            logger.debug("Function table created")
+        except Exception as e:
+            logger.debug(f"Function table already exists or create skipped: {e}")
 
     def _create_class_table(self) -> None:
         """Classノードテーブル作成"""
-        query = """
-        CREATE NODE TABLE Class (
-            id STRING,
-            name STRING,
-            qualified_name STRING,
-            file_path STRING,
-            line_number INT32,
-            method_count INT32,
-            inheritance_depth INT32,
-            is_abstract BOOLEAN,
-            PRIMARY KEY (id)
-        );
-        """
-        self.connection.execute(query)
-        logger.debug("Class table created")
+        try:
+            query = """
+            CREATE NODE TABLE Class (
+                id STRING,
+                name STRING,
+                qualified_name STRING,
+                file_path STRING,
+                line_number INT32,
+                method_count INT32,
+                inheritance_depth INT32,
+                is_abstract BOOLEAN,
+                PRIMARY KEY (id)
+            );
+            """
+            self.connection.execute(query)
+            logger.debug("Class table created")
+        except Exception as e:
+            logger.debug(f"Class table already exists or create skipped: {e}")
 
     def _create_function_calls_table(self) -> None:
         """FunctionCallsエッジテーブル作成"""
-        query = """
-        CREATE REL TABLE FunctionCalls (
-            FROM Function TO Function,
-            call_type STRING,
-            line_number INT32
-        );
-        """
-        self.connection.execute(query)
-        logger.debug("FunctionCalls table created")
+        try:
+            query = """
+            CREATE REL TABLE FunctionCalls (
+                FROM Function TO Function,
+                call_type STRING,
+                line_number INT32
+            );
+            """
+            self.connection.execute(query)
+            logger.debug("FunctionCalls table created")
+        except Exception as e:
+            logger.debug(f"FunctionCalls table already exists or create skipped: {e}")
 
     def _create_inheritance_table(self) -> None:
         """Inheritanceエッジテーブル作成"""
-        query = """
-        CREATE REL TABLE Inheritance (
-            FROM Class TO Class,
-            line_number INT32
-        );
-        """
-        self.connection.execute(query)
-        logger.debug("Inheritance table created")
+        try:
+            query = """
+            CREATE REL TABLE Inheritance (
+                FROM Class TO Class,
+                line_number INT32
+            );
+            """
+            self.connection.execute(query)
+            logger.debug("Inheritance table created")
+        except Exception as e:
+            logger.debug(f"Inheritance table already exists or create skipped: {e}")
 
     def _create_contains_table(self) -> None:
         """Containsエッジテーブル作成"""
-        query = """
-        CREATE REL TABLE Contains (
-            FROM Class TO Function,
-            line_number INT32
-        );
-        """
-        self.connection.execute(query)
-        logger.debug("Contains table created")
+        try:
+            query = """
+            CREATE REL TABLE Contains (
+                FROM Class TO Function,
+                line_number INT32
+            );
+            """
+            self.connection.execute(query)
+            logger.debug("Contains table created")
+        except Exception as e:
+            logger.debug(f"Contains table already exists or create skipped: {e}")
 
     def bulk_insert_modules(self, modules: List[Dict[str, Any]]) -> None:
         """モジュールを一括挿入"""

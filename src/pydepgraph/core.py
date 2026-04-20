@@ -108,6 +108,7 @@ class PyDepGraphCore:
         """データベースを初期化"""
         if self.database is None:
             self.database = GraphDatabase(self.config.database.path)
+            # 通常の analyze では非破壊に schema を揃えるだけ
             self.database.initialize_schema()
     
     def _store_results(self, result: ExtractionResult):

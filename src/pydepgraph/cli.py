@@ -73,6 +73,13 @@ def create_parser() -> argparse.ArgumentParser:
         '--database',
         help='Database file path (overrides config)'
     )
+
+    # reset-db command
+    reset_parser = subparsers.add_parser('reset-db', help='Reset graph database schema (destructive)')
+    reset_parser.add_argument(
+        '--database',
+        help='Database file path (overrides config)'
+    )
     
     # query command
     query_parser = subparsers.add_parser('query', help='Query dependency relationships')
@@ -149,7 +156,7 @@ def create_parser() -> argparse.ArgumentParser:
     )
     report_parser.add_argument(
         '--format',
-        choices=['json', 'html', 'markdown', 'table'],
+        choices=['json', 'markdown', 'table'],
         default='markdown',
         help='Report format (default: markdown)'
     )
@@ -278,7 +285,11 @@ def format_table(data: Any) -> str:
 def cmd_analyze(args: argparse.Namespace, config: Config) -> int:
     """analyze コマンドの実行"""
     try:
+        if args.database:
+            config.database.path = args.database
+
         print(f"Analyzing project: {args.project_path}")
+        print(f"Using database: {config.database.path}")
         
         # Initialize core
         core = PyDepGraphCore(config)
@@ -298,6 +309,25 @@ def cmd_analyze(args: argparse.Namespace, config: Config) -> int:
         
         return 0
         
+    except PyDepGraphError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"Unexpected error: {e}", file=sys.stderr)
+        return 1
+
+
+def cmd_reset_db(args: argparse.Namespace, config: Config) -> int:
+    """reset-db コマンドの実行"""
+    try:
+        if args.database:
+            config.database.path = args.database
+
+        database = GraphDatabase(config.database.path)
+        database.reset_schema()
+        print(f"Database schema reset successfully: {config.database.path}")
+        return 0
+
     except PyDepGraphError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
@@ -606,6 +636,8 @@ def main() -> int:
         # Execute command
         if args.command == 'analyze':
             return cmd_analyze(args, config)
+        elif args.command == 'reset-db':
+            return cmd_reset_db(args, config)
         elif args.command == 'query':
             return cmd_query(args, config)
         elif args.command == 'analytics':

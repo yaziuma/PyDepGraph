@@ -80,10 +80,12 @@ class Config:
     
     @classmethod
     def _from_dict(cls, data: Dict[str, Any]) -> "Config":
-        """辞書から設定オブジェクトを作成"""
+        """辞書から設定オブジェクトを作成（default merge方式）"""
+        config = cls.get_default_config()
+
         # Extractors
-        extractors = {}
         if "extractors" in data:
+            extractors = {}
             for name, extractor_data in data["extractors"].items():
                 if isinstance(extractor_data, dict):
                     enabled = extractor_data.get("enabled", True)
@@ -92,29 +94,24 @@ class Config:
                 else:
                     # Boolean shorthand
                     extractors[name] = ExtractorConfig(enabled=bool(extractor_data))
+            config.extractors.update(extractors)
         
         # Database
-        database = DatabaseConfig()
         if "database" in data:
             db_data = data["database"]
-            database.path = db_data.get("path", database.path)
-            database.enable_wal = db_data.get("enable_wal", database.enable_wal)
-            database.buffer_pool_size = db_data.get("buffer_pool_size", database.buffer_pool_size)
+            config.database.path = db_data.get("path", config.database.path)
+            config.database.enable_wal = db_data.get("enable_wal", config.database.enable_wal)
+            config.database.buffer_pool_size = db_data.get("buffer_pool_size", config.database.buffer_pool_size)
         
         # Analysis
-        analysis = AnalysisConfig()
         if "analysis" in data:
             analysis_data = data["analysis"]
-            analysis.include_tests = analysis_data.get("include_tests", analysis.include_tests)
-            analysis.exclude_patterns = analysis_data.get("exclude_patterns", analysis.exclude_patterns)
-            analysis.max_file_size_mb = analysis_data.get("max_file_size_mb", analysis.max_file_size_mb)
-            analysis.timeout_seconds = analysis_data.get("timeout_seconds", analysis.timeout_seconds)
-        
-        return cls(
-            extractors=extractors,
-            database=database,
-            analysis=analysis
-        )
+            config.analysis.include_tests = analysis_data.get("include_tests", config.analysis.include_tests)
+            config.analysis.exclude_patterns = analysis_data.get("exclude_patterns", config.analysis.exclude_patterns)
+            config.analysis.max_file_size_mb = analysis_data.get("max_file_size_mb", config.analysis.max_file_size_mb)
+            config.analysis.timeout_seconds = analysis_data.get("timeout_seconds", config.analysis.timeout_seconds)
+
+        return config
     
     def validate(self) -> None:
         """設定値の検証"""

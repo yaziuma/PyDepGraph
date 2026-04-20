@@ -5,7 +5,8 @@
 以下を実行:
 
 ```bash
-uv run pydepgraph inspect $ARGUMENTS
+uv run pydepgraph inspect $ARGUMENTS --skeleton
+uv run pydepgraph query context --target $ARGUMENTS --depth 1
 uv run pydepgraph query imports --format json
 ```
 

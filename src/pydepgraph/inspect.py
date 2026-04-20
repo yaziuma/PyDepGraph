@@ -53,6 +53,69 @@ def inspect_target(target: str) -> Dict[str, Any]:
         )
 
 
+def render_skeleton(target: str) -> str:
+    """
+    Render Python interface skeleton text for a file or directory.
+
+    Function bodies are omitted and replaced by ellipsis-style signatures.
+    """
+    path = Path(target)
+    if path.is_file() and path.suffix == ".py":
+        return _render_file_skeleton(path)
+    if path.is_dir():
+        chunks: List[str] = []
+        for py_file in sorted(path.rglob("*.py")):
+            chunks.append(_render_file_skeleton(py_file))
+        return "\n\n".join(chunks)
+    raise PyDepGraphError(f"Cannot render skeleton for target '{target}'")
+
+
+def render_target_function(target: str, function_name: str) -> str:
+    """Render full source implementation for the first matching function/method."""
+    path = Path(target)
+    if not path.is_file():
+        raise PyDepGraphError(f"Target must be a Python file: '{target}'")
+    source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(path))
+    lines = source.splitlines()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == function_name:
+            if getattr(node, "end_lineno", None) is None:
+                continue
+            snippet = "\n".join(lines[node.lineno - 1 : node.end_lineno])
+            return f"# {path}\n{snippet}"
+    raise PyDepGraphError(f"Function '{function_name}' not found in '{target}'")
+
+
+def render_context(target: str, depth: int = 1, project_root: Optional[str] = None) -> str:
+    """
+    Render dependency-aware context for LLM usage.
+
+    Dependencies are rendered as skeletons, while target is rendered in full.
+    """
+    target_path = Path(target).resolve()
+    if not target_path.is_file():
+        raise PyDepGraphError(f"Target must be a Python file: '{target}'")
+
+    root = Path(project_root).resolve() if project_root else target_path.parent.resolve()
+    module_map = _build_module_map(root)
+    dependency_paths = _collect_local_dependency_files(target_path, root, module_map, max(depth, 0))
+    dependency_paths = [p for p in dependency_paths if p != target_path]
+
+    sections: List[str] = []
+    sections.append("=== Dependencies (Skeleton) ===")
+    if dependency_paths:
+        for dep_path in sorted(dependency_paths):
+            sections.append(_render_file_skeleton(dep_path))
+    else:
+        sections.append("(none)")
+
+    sections.append("\n=== Target Implementation ===")
+    sections.append(f"# {target_path}")
+    sections.append(target_path.read_text(encoding="utf-8"))
+    return "\n".join(sections)
+
+
 def _inspect_directory(dir_path: Path) -> Dict[str, Any]:
     """Inspect all Python files in a directory."""
     results: List[Dict[str, Any]] = []
@@ -116,6 +179,144 @@ def _inspect_file(file_path: Path) -> Dict[str, Any]:
         result["imports"] = imports
 
     return result
+
+
+def _render_file_skeleton(file_path: Path) -> str:
+    source = file_path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(file_path))
+    module_docstring = ast.get_docstring(tree)
+    lines: List[str] = [f"# {file_path}"]
+    if module_docstring:
+        lines.append(f'"""{module_docstring}"""')
+
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, ast.ClassDef):
+            lines.extend(_render_class_skeleton_lines(node))
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            lines.append(f"{_build_node_signature(node)}: ...")
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            const = _extract_module_constant(node, source)
+            if const:
+                annotation = const.get("annotation")
+                if annotation:
+                    lines.append(f"{const['name']}: {annotation}")
+                else:
+                    lines.append(const["name"])
+    return "\n".join(lines)
+
+
+def _render_class_skeleton_lines(node: ast.ClassDef) -> List[str]:
+    bases = [_get_annotation_str(b) for b in node.bases]
+    header = f"class {node.name}"
+    if bases:
+        header += f"({', '.join(bases)})"
+    header += ":"
+    lines: List[str] = [header]
+
+    class_doc = ast.get_docstring(node)
+    if class_doc:
+        lines.append(f'    """{class_doc}"""')
+
+    members = 0
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            lines.append(f"    {_build_node_signature(child)}: ...")
+            members += 1
+        elif isinstance(child, ast.AnnAssign):
+            var = _extract_class_variable(child)
+            if var:
+                lines.append(f"    {var['name']}: {var['type']}")
+                members += 1
+
+    if members == 0:
+        lines.append("    ...")
+    return lines
+
+
+def _build_node_signature(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
+    params = _extract_parameters(node.args)
+    return_annotation = _get_annotation_str(node.returns) if node.returns else None
+    return _build_signature(node.name, params, return_annotation, isinstance(node, ast.AsyncFunctionDef))
+
+
+def _build_module_map(root: Path) -> Dict[str, Path]:
+    module_map: Dict[str, Path] = {}
+    for py_file in root.rglob("*.py"):
+        rel = py_file.relative_to(root)
+        if rel.name == "__init__.py":
+            module_name = ".".join(rel.parent.parts) if rel.parent.parts else ""
+        else:
+            module_name = ".".join(rel.with_suffix("").parts)
+        module_map[module_name] = py_file
+    return module_map
+
+
+def _collect_local_dependency_files(
+    target_path: Path,
+    root: Path,
+    module_map: Dict[str, Path],
+    depth: int,
+) -> List[Path]:
+    discovered: List[Path] = []
+    visited: set[Path] = set()
+    frontier: List[Path] = [target_path]
+
+    for _ in range(depth):
+        next_frontier: List[Path] = []
+        for file_path in frontier:
+            for dep in _resolve_local_import_paths(file_path, root, module_map):
+                if dep not in visited and dep.exists():
+                    visited.add(dep)
+                    discovered.append(dep)
+                    next_frontier.append(dep)
+        frontier = next_frontier
+        if not frontier:
+            break
+    return discovered
+
+
+def _resolve_local_import_paths(file_path: Path, root: Path, module_map: Dict[str, Path]) -> List[Path]:
+    source = file_path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(file_path))
+    imports: List[Path] = []
+    current_module = _module_name_from_path(file_path, root)
+    current_parts = current_module.split(".") if current_module else []
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                module_name = alias.name
+                path = module_map.get(module_name)
+                if path:
+                    imports.append(path)
+        elif isinstance(node, ast.ImportFrom):
+            base_module = node.module or ""
+            if node.level > 0:
+                anchor_parts = current_parts[: -node.level] if node.level <= len(current_parts) else []
+                if base_module:
+                    base_module = ".".join(anchor_parts + base_module.split("."))
+                else:
+                    base_module = ".".join(anchor_parts)
+            for alias in node.names:
+                candidates = []
+                if base_module:
+                    candidates.append(f"{base_module}.{alias.name}")
+                    candidates.append(base_module)
+                else:
+                    candidates.append(alias.name)
+                for module_name in candidates:
+                    path = module_map.get(module_name)
+                    if path:
+                        imports.append(path)
+                        break
+    return imports
+
+
+def _module_name_from_path(path: Path, root: Path) -> str:
+    rel = path.relative_to(root)
+    if rel.name == "__init__.py":
+        return ".".join(rel.parent.parts)
+    return ".".join(rel.with_suffix("").parts)
 
 
 def _extract_function(

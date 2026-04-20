@@ -53,6 +53,185 @@ class GraphDatabase:
         self._create_inheritance_table()
         self._create_contains_table()
 
+    def delete_project_data(self, project_root: str) -> None:
+        """指定プロジェクト配下の既存グラフデータのみを削除する。"""
+        normalized_root = Path(project_root).resolve()
+        normalized_root_str = str(normalized_root)
+        basename = normalized_root.name
+
+        logger.info(
+            "Deleting existing graph data for project scope: %s",
+            normalized_root_str,
+        )
+
+        # 絶対パス / 相対パスが混在するケースに備えて、保守的に複数条件で照合する。
+        # false positive を避けるため、曖昧な条件は使わない。
+        params = {
+            "project_root": normalized_root_str,
+            "project_prefix_slash": f"{normalized_root_str}/",
+            "project_prefix_backslash": f"{normalized_root_str}\\",
+            "project_basename": basename,
+            "project_basename_prefix_slash": f"{basename}/",
+            "project_basename_prefix_backslash": f"{basename}\\",
+        }
+
+        relationship_delete_queries = [
+            """
+            MATCH (source:Module)-[r:ModuleImports]->(target:Module)
+            WHERE
+                (
+                    source.file_path IS NOT NULL AND source.file_path <> "" AND (
+                        source.file_path = $project_root OR
+                        source.file_path STARTS WITH $project_prefix_slash OR
+                        source.file_path STARTS WITH $project_prefix_backslash OR
+                        source.file_path = $project_basename OR
+                        source.file_path STARTS WITH $project_basename_prefix_slash OR
+                        source.file_path STARTS WITH $project_basename_prefix_backslash
+                    )
+                )
+                OR
+                (
+                    target.file_path IS NOT NULL AND target.file_path <> "" AND (
+                        target.file_path = $project_root OR
+                        target.file_path STARTS WITH $project_prefix_slash OR
+                        target.file_path STARTS WITH $project_prefix_backslash OR
+                        target.file_path = $project_basename OR
+                        target.file_path STARTS WITH $project_basename_prefix_slash OR
+                        target.file_path STARTS WITH $project_basename_prefix_backslash
+                    )
+                )
+            DELETE r
+            """,
+            """
+            MATCH (source:Function)-[r:FunctionCalls]->(target:Function)
+            WHERE
+                (
+                    source.file_path IS NOT NULL AND source.file_path <> "" AND (
+                        source.file_path = $project_root OR
+                        source.file_path STARTS WITH $project_prefix_slash OR
+                        source.file_path STARTS WITH $project_prefix_backslash OR
+                        source.file_path = $project_basename OR
+                        source.file_path STARTS WITH $project_basename_prefix_slash OR
+                        source.file_path STARTS WITH $project_basename_prefix_backslash
+                    )
+                )
+                OR
+                (
+                    target.file_path IS NOT NULL AND target.file_path <> "" AND (
+                        target.file_path = $project_root OR
+                        target.file_path STARTS WITH $project_prefix_slash OR
+                        target.file_path STARTS WITH $project_prefix_backslash OR
+                        target.file_path = $project_basename OR
+                        target.file_path STARTS WITH $project_basename_prefix_slash OR
+                        target.file_path STARTS WITH $project_basename_prefix_backslash
+                    )
+                )
+            DELETE r
+            """,
+            """
+            MATCH (source:Class)-[r:Inheritance]->(target:Class)
+            WHERE
+                (
+                    source.file_path IS NOT NULL AND source.file_path <> "" AND (
+                        source.file_path = $project_root OR
+                        source.file_path STARTS WITH $project_prefix_slash OR
+                        source.file_path STARTS WITH $project_prefix_backslash OR
+                        source.file_path = $project_basename OR
+                        source.file_path STARTS WITH $project_basename_prefix_slash OR
+                        source.file_path STARTS WITH $project_basename_prefix_backslash
+                    )
+                )
+                OR
+                (
+                    target.file_path IS NOT NULL AND target.file_path <> "" AND (
+                        target.file_path = $project_root OR
+                        target.file_path STARTS WITH $project_prefix_slash OR
+                        target.file_path STARTS WITH $project_prefix_backslash OR
+                        target.file_path = $project_basename OR
+                        target.file_path STARTS WITH $project_basename_prefix_slash OR
+                        target.file_path STARTS WITH $project_basename_prefix_backslash
+                    )
+                )
+            DELETE r
+            """,
+            """
+            MATCH (source:Class)-[r:Contains]->(target:Function)
+            WHERE
+                (
+                    source.file_path IS NOT NULL AND source.file_path <> "" AND (
+                        source.file_path = $project_root OR
+                        source.file_path STARTS WITH $project_prefix_slash OR
+                        source.file_path STARTS WITH $project_prefix_backslash OR
+                        source.file_path = $project_basename OR
+                        source.file_path STARTS WITH $project_basename_prefix_slash OR
+                        source.file_path STARTS WITH $project_basename_prefix_backslash
+                    )
+                )
+                OR
+                (
+                    target.file_path IS NOT NULL AND target.file_path <> "" AND (
+                        target.file_path = $project_root OR
+                        target.file_path STARTS WITH $project_prefix_slash OR
+                        target.file_path STARTS WITH $project_prefix_backslash OR
+                        target.file_path = $project_basename OR
+                        target.file_path STARTS WITH $project_basename_prefix_slash OR
+                        target.file_path STARTS WITH $project_basename_prefix_backslash
+                    )
+                )
+            DELETE r
+            """,
+        ]
+
+        node_delete_queries = [
+            """
+            MATCH (m:Module)
+            WHERE
+                m.file_path IS NOT NULL AND m.file_path <> "" AND (
+                    m.file_path = $project_root OR
+                    m.file_path STARTS WITH $project_prefix_slash OR
+                    m.file_path STARTS WITH $project_prefix_backslash OR
+                    m.file_path = $project_basename OR
+                    m.file_path STARTS WITH $project_basename_prefix_slash OR
+                    m.file_path STARTS WITH $project_basename_prefix_backslash
+                )
+            DELETE m
+            """,
+            """
+            MATCH (f:Function)
+            WHERE
+                f.file_path IS NOT NULL AND f.file_path <> "" AND (
+                    f.file_path = $project_root OR
+                    f.file_path STARTS WITH $project_prefix_slash OR
+                    f.file_path STARTS WITH $project_prefix_backslash OR
+                    f.file_path = $project_basename OR
+                    f.file_path STARTS WITH $project_basename_prefix_slash OR
+                    f.file_path STARTS WITH $project_basename_prefix_backslash
+                )
+            DELETE f
+            """,
+            """
+            MATCH (c:Class)
+            WHERE
+                c.file_path IS NOT NULL AND c.file_path <> "" AND (
+                    c.file_path = $project_root OR
+                    c.file_path STARTS WITH $project_prefix_slash OR
+                    c.file_path STARTS WITH $project_prefix_backslash OR
+                    c.file_path = $project_basename OR
+                    c.file_path STARTS WITH $project_basename_prefix_slash OR
+                    c.file_path STARTS WITH $project_basename_prefix_backslash
+                )
+            DELETE c
+            """,
+        ]
+
+        for query in relationship_delete_queries:
+            self.connection.execute(query, params)
+
+        for query in node_delete_queries:
+            self.connection.execute(query, params)
+
+        logger.info("Project-scoped graph cleanup completed: %s", normalized_root_str)
+
     def _drop_existing_tables(self) -> None:
         """既存テーブルの削除（開発時用）"""
         try:

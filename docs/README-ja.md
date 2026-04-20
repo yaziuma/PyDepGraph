@@ -126,7 +126,7 @@ uv run pydepgraph analyze --output json      # JSON形式で出力
 依存関係データベースからの検索
 
 ```bash
-uv run pydepgraph query {modules,functions,classes,imports,calls} [OPTIONS]
+uv run pydepgraph query {modules,functions,classes,imports,calls,role,context} [OPTIONS]
 ```
 
 **サブコマンド:**
@@ -135,6 +135,8 @@ uv run pydepgraph query {modules,functions,classes,imports,calls} [OPTIONS]
 - `classes`: クラス検索
 - `imports`: インポート関係検索
 - `calls`: 関数呼び出し関係検索
+- `role`: ロール推定結果でのモジュール検索（`--value` 必須）
+- `context`: LLM向けコンテキスト出力（依存=骨格、対象=フル実装）
 
 **オプション:**
 - `--filter TEXT`: フィルタ条件（部分一致）
@@ -145,7 +147,24 @@ uv run pydepgraph query {modules,functions,classes,imports,calls} [OPTIONS]
 uv run pydepgraph query functions --filter "run"     # "run"を含む関数を検索
 uv run pydepgraph query modules --format json        # 全モジュールをJSON形式で取得
 uv run pydepgraph query calls --filter "repl"        # "repl"関連の関数呼び出し
+uv run pydepgraph query role --value service         # service ロールのモジュールを検索
+uv run pydepgraph query context --target src/pydepgraph/core.py --depth 1
 ```
+
+### inspect（LLM向けの実用的な使い方）
+
+```bash
+# 1) まず骨格のみ
+uv run pydepgraph inspect src/pydepgraph/core.py --skeleton
+
+# 2) 周辺依存を最小情報で確認（依存は骨格、対象はフル）
+uv run pydepgraph query context --target src/pydepgraph/core.py --depth 1
+
+# 3) 必要な関数だけ詳細実装を取得
+uv run pydepgraph inspect src/pydepgraph/core.py --target-function analyze
+```
+
+この順（**skeleton → context → target-function**）で使うと、LLMに渡すトークンを抑えつつ、必要箇所だけ深掘りできます。
 
 ### analytics
 グラフ分析機能

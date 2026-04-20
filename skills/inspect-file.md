@@ -6,38 +6,29 @@
 
 ---
 
-## 基本手順（必須）
+## 使い方（目的に応じて選択）
 
-### 1) まず骨格だけ取る
+### A. 構造を素早く把握したいとき（骨格）
 ```bash
 uv run pydepgraph inspect $ARGUMENTS --skeleton
 ```
 
-ここでは以下のみ把握する:
+把握できる情報:
 - クラス名 / 継承関係
 - 関数・メソッドのシグネチャ
 - 定数・docstring・import
 
-### 2) 周辺依存を薄く取る（必要時）
+### B. 対象 + 周辺依存を一緒に見たいとき（context）
 ```bash
 uv run pydepgraph query context --target $ARGUMENTS --depth 1
 ```
 
-- 依存先は skeleton
-- 対象ファイルは full 実装
+`--depth` は必要に応じて変更可能です（例: `--depth 2`）。
 
-### 3) ピンポイント詳細（必要時）
+### C. 関数単位で詳細を見たいとき
 ```bash
 uv run pydepgraph inspect $ARGUMENTS --target-function <function_name>
 ```
-
----
-
-## 判断ルール
-
-- 最初から全文を読まない。
-- 原則: **skeleton → context → target-function** の順で情報を増やす。
-- 深さを増やすのは、`--depth 1` で足りないときだけ。
 
 ---
 
@@ -48,4 +39,4 @@ uv run pydepgraph inspect $ARGUMENTS --target-function <function_name>
 3. **依存関係**: 主要な依存先（必要なものだけ）
 4. **詳細実装（必要箇所のみ）**: `--target-function` で取得した内容を要約
 
-不要な長文転記は禁止。要点のみを返すこと。
+上記A/B/Cを、要求に合わせて自由に組み合わせて使ってください。

@@ -58,14 +58,16 @@ def test_store_results_inserts_contains_relationship_when_resolvable():
     )
 
     core._store_results(result)
+    expected_class_id = core._stable_class_id(result.classes[0])
+    expected_function_id = core._stable_function_id(result.functions[0])
 
     db.bulk_insert_contains.assert_called_once_with(
         [
             {
                 "id": "1",
                 "relationship_type": "Contains",
-                "source_class_id": "1",
-                "target_function_id": "1",
+                "source_class_id": expected_class_id,
+                "target_function_id": expected_function_id,
                 "line_number": 0,
             }
         ]

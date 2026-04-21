@@ -1,5 +1,6 @@
 # pydepgraph/core.py
 import logging
+import hashlib
 from pathlib import Path
 from typing import Optional
 from tqdm import tqdm
@@ -122,9 +123,9 @@ class PyDepGraphCore:
         
         # Convert to database format (all results are now proper objects)
         modules_data = []
-        for i, module in enumerate(result.modules, 1):
+        for module in result.modules:
             modules_data.append({
-                "id": str(i),  # String IDに変更
+                "id": self._stable_module_id(module),
                 "name": module.name,
                 "file_path": module.file_path,
                 "package": module.package or "",
@@ -136,9 +137,9 @@ class PyDepGraphCore:
             })
         
         functions_data = []
-        for i, function in enumerate(result.functions, 1):
+        for function in result.functions:
             functions_data.append({
-                "id": str(i),  # String IDに変更
+                "id": self._stable_function_id(function),
                 "name": function.name,
                 "qualified_name": function.qualified_name,
                 "file_path": function.file_path,
@@ -151,9 +152,9 @@ class PyDepGraphCore:
             })
         
         classes_data = []
-        for i, cls in enumerate(result.classes, 1):
+        for cls in result.classes:
             classes_data.append({
-                "id": str(i),  # String IDに変更
+                "id": self._stable_class_id(cls),
                 "name": cls.name,
                 "qualified_name": cls.qualified_name,
                 "file_path": cls.file_path,
@@ -310,3 +311,20 @@ class PyDepGraphCore:
         if self.database:
             self.database.close()
             self.database = None
+
+    def _stable_id(self, prefix: str, key: str) -> str:
+        """Deterministic, human-debuggable ID generator."""
+        digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
+        return f"{prefix}:{digest}"
+
+    def _stable_module_id(self, module) -> str:
+        key = module.file_path or module.name
+        return self._stable_id("module", key)
+
+    def _stable_function_id(self, function) -> str:
+        key = function.qualified_name or f"{function.file_path}:{function.name}:{function.line_number or 0}"
+        return self._stable_id("function", key)
+
+    def _stable_class_id(self, cls) -> str:
+        key = cls.qualified_name or f"{cls.file_path}:{cls.name}:{cls.line_number or 0}"
+        return self._stable_id("class", key)

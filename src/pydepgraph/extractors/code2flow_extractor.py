@@ -12,6 +12,7 @@ from .base import ExtractorBase, RawExtractionResult
 from ..exceptions import PrologExecutionError
 from ..utils.metadata_collector import MetadataCollector
 from ..utils.definition_indexer import DefinitionIndexer
+from ..utils.file_filter import iter_python_files, DEFAULT_EXCLUDE_PATTERNS
 
 logger = logging.getLogger(__name__)
 
@@ -167,10 +168,11 @@ class _CallResolverVisitor(ast.NodeVisitor):
 
 
 class Code2FlowExtractor(ExtractorBase):
-    def __init__(self, ast_mode: bool = False):
+    def __init__(self, ast_mode: bool = False, exclude_patterns: Optional[List[str]] = None):
         self.function_id_counter = 0
         self.class_id_counter = 0
-        self.metadata_collector = MetadataCollector()
+        self.exclude_patterns = exclude_patterns or DEFAULT_EXCLUDE_PATTERNS
+        self.metadata_collector = MetadataCollector(exclude_patterns=self.exclude_patterns)
         self.ast_mode = ast_mode
 
     def extract(self, project_path: str) -> RawExtractionResult:
@@ -188,13 +190,13 @@ class Code2FlowExtractor(ExtractorBase):
 
     def _extract_with_cross_file_resolver(self, project_path: str) -> RawExtractionResult:
         logger.info(f"Cross-file resolver running on {project_path}")
-        indexer = DefinitionIndexer(project_path)
+        indexer = DefinitionIndexer(project_path, exclude_patterns=self.exclude_patterns)
         definition_index = indexer.index_project()
         all_relationships = []
         project_root = Path(project_path)
         if jedi is not None:
             sys.path.insert(0, str(project_root))
-        for py_file in project_root.rglob("*.py"):
+        for py_file in iter_python_files(project_root, self.exclude_patterns):
             try:
                 with open(py_file, "r", encoding="utf-8") as f:
                     source_code = f.read()
@@ -327,7 +329,7 @@ class Code2FlowExtractor(ExtractorBase):
     def _ast_analysis(self, project_path: str) -> RawExtractionResult:
         functions, classes, relationships = [], [], []
         project_root = Path(project_path)
-        for py_file in list(project_root.rglob("*.py")):
+        for py_file in iter_python_files(project_root, self.exclude_patterns):
             try:
                 file_metadata = self.metadata_collector.collect_file_metadata(str(py_file))
                 if file_metadata:

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .exceptions import PyDepGraphError
+from .utils.file_filter import iter_python_files
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +54,7 @@ def inspect_target(target: str) -> Dict[str, Any]:
         )
 
 
-def render_skeleton(target: str) -> str:
+def render_skeleton(target: str, exclude_patterns: Optional[List[str]] = None) -> str:
     """
     Render Python interface skeleton text for a file or directory.
 
@@ -64,7 +65,7 @@ def render_skeleton(target: str) -> str:
         return _render_file_skeleton(path)
     if path.is_dir():
         chunks: List[str] = []
-        for py_file in sorted(path.rglob("*.py")):
+        for py_file in sorted(iter_python_files(path, exclude_patterns)):
             chunks.append(_render_file_skeleton(py_file))
         return "\n\n".join(chunks)
     raise PyDepGraphError(f"Cannot render skeleton for target '{target}'")
@@ -116,10 +117,10 @@ def render_context(target: str, depth: int = 1, project_root: Optional[str] = No
     return "\n".join(sections)
 
 
-def _inspect_directory(dir_path: Path) -> Dict[str, Any]:
+def _inspect_directory(dir_path: Path, exclude_patterns: Optional[List[str]] = None) -> Dict[str, Any]:
     """Inspect all Python files in a directory."""
     results: List[Dict[str, Any]] = []
-    for py_file in sorted(dir_path.rglob("*.py")):
+    for py_file in sorted(iter_python_files(dir_path, exclude_patterns)):
         try:
             file_result = _inspect_file(py_file)
             if file_result.get("definitions"):
@@ -239,9 +240,9 @@ def _build_node_signature(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
     return _build_signature(node.name, params, return_annotation, isinstance(node, ast.AsyncFunctionDef))
 
 
-def _build_module_map(root: Path) -> Dict[str, Path]:
+def _build_module_map(root: Path, exclude_patterns: Optional[List[str]] = None) -> Dict[str, Path]:
     module_map: Dict[str, Path] = {}
-    for py_file in root.rglob("*.py"):
+    for py_file in iter_python_files(root, exclude_patterns):
         rel = py_file.relative_to(root)
         if rel.name == "__init__.py":
             module_name = ".".join(rel.parent.parts) if rel.parent.parts else ""

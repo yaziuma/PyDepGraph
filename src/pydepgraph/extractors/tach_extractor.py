@@ -3,7 +3,7 @@
 import subprocess
 import json
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 import logging
 
 from .base import ExtractorBase, RawExtractionResult
@@ -15,8 +15,8 @@ logger = logging.getLogger(__name__)
 class TachExtractor(ExtractorBase):
     """Tachを使用したモジュール依存関係抽出器"""
     
-    def __init__(self):
-        self.metadata_collector = MetadataCollector()
+    def __init__(self, exclude_patterns: Optional[List[str]] = None):
+        self.metadata_collector = MetadataCollector(exclude_patterns=exclude_patterns)
 
     def extract(self, project_path: str) -> RawExtractionResult:
         """Tachコマンドを実行してモジュール依存関係を抽出"""

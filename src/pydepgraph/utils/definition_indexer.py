@@ -3,6 +3,7 @@
 import ast
 from pathlib import Path
 from typing import Dict, Any, List, Optional
+from .file_filter import iter_python_files, DEFAULT_EXCLUDE_PATTERNS
 
 class DefinitionIndexer:
     """
@@ -10,15 +11,16 @@ class DefinitionIndexer:
     and method definitions with their fully qualified names (FQN).
     """
 
-    def __init__(self, project_root: str):
+    def __init__(self, project_root: str, exclude_patterns: Optional[List[str]] = None):
         self.project_root = Path(project_root).resolve()
+        self.exclude_patterns = exclude_patterns or DEFAULT_EXCLUDE_PATTERNS
         self.index: Dict[str, Dict[str, Any]] = {}
 
     def index_project(self) -> Dict[str, Dict[str, Any]]:
         """
         Indexes all Python files in the project root.
         """
-        for py_file in self.project_root.rglob("*.py"):
+        for py_file in iter_python_files(self.project_root, self.exclude_patterns):
             self._index_file(py_file)
         return self.index
 

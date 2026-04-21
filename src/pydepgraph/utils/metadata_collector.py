@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
+from .file_filter import iter_python_files, DEFAULT_EXCLUDE_PATTERNS
 
 try:
     from radon.complexity import cc_visit
@@ -61,8 +62,9 @@ class ClassMetadata:
 class MetadataCollector:
     """Utility class for collecting comprehensive code metadata using Radon and AST analysis"""
     
-    def __init__(self):
+    def __init__(self, exclude_patterns: Optional[List[str]] = None):
         self.radon_available = RADON_AVAILABLE
+        self.exclude_patterns = exclude_patterns or DEFAULT_EXCLUDE_PATTERNS
         if not self.radon_available:
             logger.warning("Radon not available, falling back to basic AST analysis")
     
@@ -327,7 +329,7 @@ class MetadataCollector:
             total_lines = 0
             complexity_count = 0
             
-            for py_file in path.rglob('*.py'):
+            for py_file in iter_python_files(path, self.exclude_patterns):
                 if py_file.name == '__init__.py':
                     continue  # Skip __init__.py for directory aggregation
                 

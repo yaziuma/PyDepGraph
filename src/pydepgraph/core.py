@@ -52,7 +52,7 @@ class PyDepGraphCore:
             # Tach extractor
             if self.config.extractors.get("tach", {}).enabled:
                 logger.info("Running Tach extractor...")
-                tach_extractor = TachExtractor()
+                tach_extractor = TachExtractor(exclude_patterns=self.config.analysis.exclude_patterns)
                 tach_result = tach_extractor.extract(str(project_path))
                 extraction_results.append(tach_result)
                 logger.info(f"Tach extractor found {len(tach_result.modules)} modules")
@@ -60,7 +60,7 @@ class PyDepGraphCore:
             # Code2Flow extractor
             if self.config.extractors.get("code2flow", {}).enabled:
                 logger.info("Running Code2Flow extractor...")
-                code2flow_extractor = Code2FlowExtractor()
+                code2flow_extractor = Code2FlowExtractor(exclude_patterns=self.config.analysis.exclude_patterns)
                 code2flow_result = code2flow_extractor.extract(str(project_path))
                 extraction_results.append(code2flow_result)
                 logger.info(f"Code2Flow extractor found {len(code2flow_result.functions)} functions, {len(code2flow_result.classes)} classes")
